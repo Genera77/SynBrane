@@ -73,6 +73,18 @@ button {
   transition: transform 0.1s ease, box-shadow 0.2s ease;
 }
 
+.secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
 button:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3);
@@ -106,6 +118,11 @@ button:hover {
   border-radius: 8px;
   padding: 0.75rem;
   background: rgba(255, 255, 255, 0.02);
+}
+
+.bar-card.active-bar {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3);
 }
 
 .bar-card h3 {

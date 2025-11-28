@@ -9,25 +9,30 @@
   <body>
     <header>
       <h1>SynBrane</h1>
-      <p>Explore tunings, choose chords with roots, and stitch a 4-bar loop for harmony or rhythm playback.</p>
+      <p>Explore tunings, audition chords with roots, and stitch a 4-bar loop for harmony or rhythm playback.</p>
     </header>
     <main>
       <section class="panel">
-        <h2>Tuning library</h2>
+        <h2>Explore</h2>
+        <p class="meta">Tuning + chord palette. Pick a temperament, choose a root, browse chords, then send your choice to the selected bar in the sequencer.</p>
         <label>Tuning
           <select id="tuningSelect"></select>
         </label>
         <label>Root note
           <select id="rootSelect"></select>
         </label>
-        <p class="meta">Pick a root, then choose a chord pattern. Degrees are relative to the root degree.</p>
+        <p class="meta" id="selectedBarLabel">Selected Bar: 1</p>
+        <p class="meta">Choose a chord pattern below and use the button to assign it to the highlighted bar. Degrees are relative to the root degree.</p>
         <div id="tuningMeta" class="meta"></div>
         <div id="chordList"></div>
+        <div class="actions">
+          <button id="assignChordBtn" class="secondary">Use for Bar 1</button>
+        </div>
       </section>
 
       <section class="panel">
         <h2>Sequencer (4 bars)</h2>
-        <p class="meta">Each bar holds one chord. Mix tunings freely.</p>
+        <p class="meta">Each bar holds one chord. Click a bar to select it, then assign from Explore. Mix tunings freely.</p>
         <div id="barsContainer" class="bars"></div>
       </section>
 
@@ -90,6 +95,7 @@
         </div>
         <div class="actions">
           <button id="playLoopBtn">Play 4-bar loop</button>
+          <button id="stopLoopBtn" class="ghost">Stop loop</button>
           <button id="renderLoopBtn">Render 4-bar loop</button>
         </div>
         <div id="status" class="meta"></div>

@@ -71,42 +71,54 @@ SynthDef(\"synbrane_harmony\", { |freq = 440, amp = 0.2, sustain = 1|
 
 SynthDef(\"synbrane_rhythm\", { |freq = 440, rate = 2, amp = 0.25|
   var trig = Impulse.kr(rate.max(0.5));
-  var env = Decay2.kr(trig, 0.001, 0.05);
-  var sig = SinOsc.ar(freq * 0.5) * env * amp;
-  Out.ar(0, sig);
+  var base = freq.clip(40, 260);
+  var env = EnvGen.kr(Env.perc(0.003, 0.12, 1, -4), trig);
+  var partials = Mix.fill(4, { |i| SinOsc.ar(base * (i + 1)) * (1 / ((i + 1.5))) });
+  var noise = PinkNoise.ar(0.25);
+  var sig = (partials + noise) * env;
+  sig = tanh(sig * 2.5);
+  Out.ar(0, sig * amp);
 }).add;
 `;
 }
 
-function buildRealtimeScript({ mode, frequencies, duration, mappingFactor }) {
+function buildRealtimeScript({ mode, frequencies, duration, mappingFactor, loopCount }) {
   const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 0.01);
   const synthBlock = buildSynthDefBlock();
+  const loops = Math.max(1, loopCount || 1);
   return `
 (
 var freqs = ${JSON.stringify(frequencies)};
 var rates = ${JSON.stringify(rates)};
 var duration = ${duration};
 var mode = \"${mode}\";
+var loops = ${loops};
 s.options.numOutputBusChannels = 1;
 ${synthBlock}
 
 s.waitForBoot {
   Routine({
     var synths;
-    if (mode == \"harmony\") {
-      synths = freqs.collect { |freq|
-        Synth(\"synbrane_harmony\", [\"freq\", freq, \"amp\", 0.6 / (freqs.size.max(1))])
+    var count = 0;
+    loop {
+      if (mode == \"harmony\") {
+        synths = freqs.collect { |freq|
+          Synth(\"synbrane_harmony\", [\"freq\", freq, \"amp\", 0.6 / (freqs.size.max(1))])
+        };
+      } {
+        synths = freqs.collect { |freq, i|
+          Synth(\"synbrane_rhythm\", [\"freq\", freq, \"rate\", rates[i], \"amp\", 0.45 / ((i + 1).asFloat)])
+        };
       };
-    } {
-      synths = freqs.collect { |freq, i|
-        Synth(\"synbrane_rhythm\", [\"freq\", freq, \"rate\", rates[i], \"amp\", 0.45 / ((i + 1).asFloat)])
+      duration.wait;
+      synths.do(_.free);
+      count = count + 1;
+      if (count >= loops) {
+        0.2.wait;
+        s.quit;
+        0.exit;
       };
     };
-    duration.wait;
-    synths.do(_.free);
-    0.2.wait;
-    s.quit;
-    0.exit;
   }).play;
 };
 )
@@ -159,8 +171,8 @@ Score.new(messages).recordNRT(
 `;
 }
 
-async function playRealtime({ mode, frequencies, duration, mappingFactor }) {
-  const script = buildRealtimeScript({ mode, frequencies, duration, mappingFactor });
+async function playRealtime({ mode, frequencies, duration, mappingFactor, loopCount }) {
+  const script = buildRealtimeScript({ mode, frequencies, duration, mappingFactor, loopCount });
   await runSclang(script);
   return { status: 'scheduled', transport: 'supercollider' };
 }

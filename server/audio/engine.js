@@ -129,21 +129,20 @@ function generateChordSamples({ mode, frequencies, duration, sampleRate, mapping
     rates.forEach((rate, index) => {
       const intervalSeconds = 1 / rate;
       const voiceIsKick = index === 0;
-      const toneFrequency = voiceIsKick ? 70 : null;
-      const toneMix = voiceIsKick ? 0.6 : 0;
-      const noiseMix = voiceIsKick ? 0.4 : 1;
-      const decay = voiceIsKick ? 0.08 : 0.025;
-      const hpCutoff = voiceIsKick ? 1800 : 3200;
+      const baseFrequency = Math.max(40, Math.min(frequencies[index] * 0.5, 260));
+      const partials = [1, 2, 3, 4];
+      const decay = voiceIsKick ? 0.22 : 0.12;
+      const noiseMix = voiceIsKick ? 0.2 : 0.35;
       for (let t = 0; t < duration; t += intervalSeconds) {
         const startSample = Math.floor(t * sampleRate);
         addPercussiveHit(samples, startSample, sampleRate, {
           amplitude: 1 / (index + 1),
-          attack: 0.0005,
+          attack: 0.004,
           decay,
-          toneFrequency,
-          toneMix,
+          baseFrequency,
+          partials,
           noiseMix,
-          highpassCutoff: hpCutoff,
+          saturation: 0.85,
         });
       }
     });
@@ -177,21 +176,16 @@ function generateChordSamples({ mode, frequencies, duration, sampleRate, mapping
 
 function addPercussiveHit(samples, startSample, sampleRate, {
   amplitude = 1,
-  attack = 0.001,
-  decay = 0.02,
-  toneFrequency = null,
-  toneMix = 0,
-  noiseMix = 1,
-  highpassCutoff = 2500,
+  attack = 0.004,
+  decay = 0.12,
+  baseFrequency = 80,
+  partials = [1, 2, 3, 4],
+  noiseMix = 0.25,
+  saturation = 0.85,
 } = {}) {
   const attackSamples = Math.max(1, Math.floor(attack * sampleRate));
   const decaySamples = Math.max(1, Math.floor(decay * sampleRate));
   const totalSamples = attackSamples + decaySamples;
-  const dt = 1 / sampleRate;
-  const rc = 1 / (2 * Math.PI * highpassCutoff);
-  const alpha = rc / (rc + dt);
-  let prevY = 0;
-  let prevX = 0;
 
   for (let i = 0; i < totalSamples; i += 1) {
     const env = i < attackSamples
@@ -201,21 +195,21 @@ function addPercussiveHit(samples, startSample, sampleRate, {
     let sampleValue = 0;
 
     if (noiseMix > 0) {
-      let noise = Math.random() * 2 - 1;
-      const y = alpha * (prevY + noise - prevX);
-      prevY = y;
-      prevX = noise;
-      noise = y;
-      sampleValue += noise * noiseMix;
+      sampleValue += (Math.random() * 2 - 1) * noiseMix;
     }
 
-    if (toneMix > 0 && toneFrequency) {
-      sampleValue += Math.sin(2 * Math.PI * toneFrequency * time) * toneMix;
+    if (partials?.length) {
+      partials.forEach((partial, index) => {
+        const weight = 1 / Math.max(1.5, index + 1);
+        sampleValue += Math.sin(2 * Math.PI * baseFrequency * partial * time) * weight;
+      });
     }
 
     const targetIndex = startSample + i;
     if (targetIndex < samples.length) {
-      samples[targetIndex] += sampleValue * env * amplitude;
+      const raw = sampleValue * env * amplitude;
+      const clipped = Math.tanh(raw * (1 + saturation * 2));
+      samples[targetIndex] += clipped;
     }
   }
 }
@@ -293,7 +287,7 @@ function playRealtime(job) {
   // send OSC messages or score data to scsynth/sclang. Here we simply log the
   // job so that the backend can be wired to a sound engine later.
   // eslint-disable-next-line no-console
-  console.log('[playRealtime]', { ...job, synthSettings: normalizeSynthSettings(job.synthSettings) });
+  console.log('[playRealtime]', { ...job, loopCount: job.loopCount || 1, synthSettings: normalizeSynthSettings(job.synthSettings) });
   return { status: 'scheduled' };
 }
 

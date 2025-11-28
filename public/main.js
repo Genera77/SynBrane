@@ -23,6 +23,9 @@ const cutoffInput = document.getElementById('cutoff');
 const cutoffLabel = document.getElementById('cutoffLabel');
 const resonanceInput = document.getElementById('resonance');
 const resonanceLabel = document.getElementById('resonanceLabel');
+const selectedBarLabel = document.getElementById('selectedBarLabel');
+const assignChordBtn = document.getElementById('assignChordBtn');
+const stopLoopBtn = document.getElementById('stopLoopBtn');
 
 const state = {
   tunings: [],
@@ -32,6 +35,7 @@ const state = {
   selectedChordId: null,
   selectedRoot: 0,
   bars: [],
+  selectedBar: 0,
   mode: 'harmony',
   bpm: 120,
   rhythmSpeed: 0.01,
@@ -48,6 +52,13 @@ const state = {
       resonance: 0.2,
     },
   },
+};
+
+const loopPreview = {
+  ctx: null,
+  timer: null,
+  loops: 0,
+  stopRequested: false,
 };
 
 function updateStatus(text) {
@@ -68,6 +79,17 @@ function getChord(tuningId, chordId) {
   const cache = state.chordsByTuning[tuningId];
   if (!cache) return null;
   return cache.chords.find((chord) => chord.id === chordId);
+}
+
+function updateSelectedBarLabel() {
+  const barNumber = state.selectedBar + 1;
+  if (selectedBarLabel) {
+    selectedBarLabel.textContent = `Selected Bar: ${barNumber}`;
+  }
+  if (assignChordBtn) {
+    assignChordBtn.textContent = `Use for Bar ${barNumber}`;
+    assignChordBtn.disabled = !state.selectedChordId;
+  }
 }
 
 function updateSynthLabels() {
@@ -104,6 +126,7 @@ async function fetchTunings() {
     renderRoots();
     renderChords();
     renderBars();
+    updateSelectedBarLabel();
   }
 }
 
@@ -124,6 +147,7 @@ function seedSelections() {
     root: state.selectedRoot,
     chordId: state.selectedChordId,
   }));
+  state.selectedBar = 0;
 }
 
 function renderTunings() {
@@ -166,23 +190,54 @@ function renderChords() {
       document.querySelectorAll('.chord-item').forEach((el) => el.classList.remove('active'));
       item.classList.add('active');
       updateStatus(`Selected ${chord.label || chord.name}`);
+      updateSelectedBarLabel();
     };
     chordList.appendChild(item);
   });
   if (chords.length && !state.selectedChordId) {
     state.selectedChordId = chords[0].id;
   }
+  if (chords.length && !chords.find((c) => c.id === state.selectedChordId)) {
+    state.selectedChordId = chords[0].id;
+  }
   const active = chordList.querySelector(
     `.chord-item:nth-child(${chords.findIndex((c) => c.id === state.selectedChordId) + 1 || 1})`
   );
   if (active) active.classList.add('active');
+  updateSelectedBarLabel();
+}
+
+function assignChordToSelectedBar() {
+  const chord = getChord(state.selectedTuningId, state.selectedChordId);
+  if (!chord) {
+    updateStatus('Pick a chord in Explore first.');
+    return;
+  }
+  const barIndex = state.selectedBar;
+  const current = state.bars[barIndex];
+  state.bars[barIndex] = {
+    ...current,
+    tuningId: state.selectedTuningId,
+    root: Number(state.selectedRoot || 0),
+    chordId: state.selectedChordId,
+  };
+  renderBars();
+  updateSelectedBarLabel();
+  updateStatus(`Assigned ${chord.label || chord.name} to bar ${barIndex + 1}.`);
 }
 
 function renderBars() {
   barsContainer.innerHTML = '';
   state.bars.forEach((bar) => {
     const card = document.createElement('div');
-    card.className = 'bar-card';
+    card.className = `bar-card ${bar.bar === state.selectedBar ? 'active-bar' : ''}`;
+    card.onclick = (event) => {
+      const targetTag = event.target.tagName.toLowerCase();
+      if (targetTag === 'select' || targetTag === 'option') return;
+      state.selectedBar = bar.bar;
+      renderBars();
+      updateSelectedBarLabel();
+    };
     const title = document.createElement('h3');
     title.textContent = `Bar ${bar.bar + 1}`;
     card.appendChild(title);
@@ -207,6 +262,7 @@ function renderBars() {
         chordId: cache.chords[0]?.id || null,
       };
       renderBars();
+      updateSelectedBarLabel();
     };
     tuningLabel.appendChild(tuningSelectEl);
     card.appendChild(tuningLabel);
@@ -270,20 +326,33 @@ function frequenciesForEvent(event) {
   return chord.degrees.map((degree) => degreeToFrequency(event.tuningId, degree + Number(event.root || 0)));
 }
 
+function makeSaturationCurve(amount = 0.8) {
+  const k = Math.max(0.1, amount * 3);
+  const nSamples = 1024;
+  const curve = new Float32Array(nSamples);
+  for (let i = 0; i < nSamples; i += 1) {
+    const x = (i * 2) / nSamples - 1;
+    curve[i] = Math.tanh(k * x);
+  }
+  return curve;
+}
+
 function createPercussiveHit(ctx, startTime, {
   amplitude = 0.9,
-  attack = 0.0005,
-  decay = 0.025,
-  toneFrequency = null,
-  toneMix = 0,
-  noiseMix = 1,
-  highpass = 3000,
+  attack = 0.005,
+  decay = 0.1,
+  baseFrequency = 80,
+  partials = [1, 2, 3, 4],
+  noiseMix = 0.25,
+  saturation = 0.8,
 } = {}) {
-  const duration = attack + decay + 0.02;
+  const duration = attack + decay + 0.08;
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.setValueAtTime(0.0001, startTime);
   gain.gain.linearRampToValueAtTime(amplitude, startTime + attack);
   gain.gain.exponentialRampToValueAtTime(0.0001, startTime + attack + decay);
+
+  const mixBus = ctx.createGain();
 
   if (noiseMix > 0) {
     const noiseBuffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
@@ -295,31 +364,29 @@ function createPercussiveHit(ctx, startTime, {
     noise.buffer = noiseBuffer;
     const noiseGain = ctx.createGain();
     noiseGain.gain.value = noiseMix;
-    if (highpass) {
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'highpass';
-      filter.frequency.value = highpass;
-      noise.connect(filter).connect(noiseGain);
-    } else {
-      noise.connect(noiseGain);
-    }
-    noiseGain.connect(gain);
+    noise.connect(noiseGain).connect(mixBus);
     noise.start(startTime);
     noise.stop(startTime + duration);
   }
 
-  if (toneMix > 0 && toneFrequency) {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = toneFrequency;
-    const toneGain = ctx.createGain();
-    toneGain.gain.value = toneMix;
-    osc.connect(toneGain).connect(gain);
-    osc.start(startTime);
-    osc.stop(startTime + attack + decay + 0.05);
+  if (partials?.length) {
+    partials.forEach((partial, index) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = baseFrequency * partial;
+      const toneGain = ctx.createGain();
+      toneGain.gain.value = 1 / Math.max(1.5, index + 1);
+      osc.connect(toneGain).connect(mixBus);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    });
   }
 
-  gain.connect(ctx.destination);
+  const shaper = ctx.createWaveShaper();
+  shaper.curve = makeSaturationCurve(saturation);
+  shaper.oversample = '4x';
+
+  mixBus.connect(shaper).connect(gain).connect(ctx.destination);
 }
 
 function scheduleHarmony(ctx, startTime, duration, freqs, synthSettings) {
@@ -362,25 +429,23 @@ function scheduleHarmony(ctx, startTime, duration, freqs, synthSettings) {
 }
 
 function scheduleRhythm(ctx, startTime, duration, freqs) {
-  const baseAmp = 0.8;
+  const baseAmp = 0.75;
   freqs.forEach((freq, index) => {
     const rate = Math.max(0.5, freq * state.rhythmSpeed);
     const interval = 1 / rate;
-    const voiceIsKick = index === 0;
-    const toneFrequency = voiceIsKick ? 70 : null;
-    const toneMix = voiceIsKick ? 0.6 : 0;
-    const noiseMix = voiceIsKick ? 0.4 : 1;
-    const decay = voiceIsKick ? 0.08 : 0.025;
-    const highpass = voiceIsKick ? 1800 : 3200;
+    const baseFrequency = Math.max(40, Math.min((freq || 80) * 0.5, 260));
+    const partials = [1, 2, 3, 4];
+    const decay = index === 0 ? 0.2 : 0.12;
+    const noiseMix = index === 0 ? 0.2 : 0.35;
     for (let t = 0; t < duration; t += interval) {
       createPercussiveHit(ctx, startTime + t, {
         amplitude: baseAmp / (index + 1),
-        attack: 0.0005,
+        attack: 0.004,
         decay,
-        toneFrequency,
-        toneMix,
+        baseFrequency,
+        partials,
         noiseMix,
-        highpass,
+        saturation: 0.85,
       });
     }
   });
@@ -399,21 +464,59 @@ function playChordPreview(event) {
   }
 }
 
-function playSequencePreview(events) {
-  const ctx = new AudioContext();
-  const beatsPerBar = 4;
-  const secondsPerBeat = 60 / state.bpm;
-  const barDuration = beatsPerBar * secondsPerBeat;
-  const start = ctx.currentTime + 0.05;
+function playSequenceOnce(ctx, startTime, barDuration, events) {
   events.forEach((event) => {
     const freqs = frequenciesForEvent(event);
-    const eventStart = start + barDuration * event.bar;
+    const eventStart = startTime + barDuration * event.bar;
     if (state.mode === 'rhythm') {
       scheduleRhythm(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
     } else {
       scheduleHarmony(ctx, eventStart, barDuration * (event.durationBars || 1), freqs, state.synth);
     }
   });
+}
+
+function stopLoopPreview(reason) {
+  loopPreview.stopRequested = true;
+  if (loopPreview.timer) {
+    clearTimeout(loopPreview.timer);
+    loopPreview.timer = null;
+  }
+  if (loopPreview.ctx) {
+    loopPreview.ctx.close();
+    loopPreview.ctx = null;
+  }
+  if (reason) {
+    updateStatus(reason);
+  }
+}
+
+function playLoopPreview(events) {
+  stopLoopPreview();
+  const ctx = new AudioContext();
+  const beatsPerBar = 4;
+  const secondsPerBeat = 60 / state.bpm;
+  const barDuration = beatsPerBar * secondsPerBeat;
+  const totalBars = Math.max(...events.map((event) => (event.bar || 0) + (event.durationBars || 1)), 1);
+  const loopDuration = barDuration * totalBars;
+  const start = ctx.currentTime + 0.05;
+  loopPreview.ctx = ctx;
+  loopPreview.stopRequested = false;
+  loopPreview.loops = 0;
+
+  const queuePass = (loopIndex) => {
+    if (loopPreview.stopRequested) return;
+    if (loopIndex >= 10) {
+      stopLoopPreview('Reached 10 loops.');
+      return;
+    }
+    const loopStart = start + loopIndex * loopDuration;
+    playSequenceOnce(ctx, loopStart, barDuration, events);
+    loopPreview.loops = loopIndex + 1;
+    loopPreview.timer = setTimeout(() => queuePass(loopIndex + 1), loopDuration * 1000);
+  };
+
+  queuePass(0);
 }
 
 function buildChordPayload() {
@@ -444,6 +547,7 @@ function buildLoopPayload() {
     bpm: state.bpm,
     rhythmSpeed: state.rhythmSpeed,
     synthSettings: state.synth,
+    loopCount: 10,
     sequence,
   };
 }
@@ -454,6 +558,7 @@ async function playChord() {
     updateStatus('Pick a chord first.');
     return;
   }
+  stopLoopPreview();
   updateStatus('Scheduling chord…');
   await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   playChordPreview({ tuningId: payload.tuningId, chordId: payload.chord.id, root: payload.root, bar: 0, durationBars: 1 });
@@ -487,8 +592,8 @@ async function playLoop() {
   }
   updateStatus('Scheduling loop…');
   await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  playSequencePreview(payload.sequence);
-  updateStatus('Loop scheduled. Preview playing locally.');
+  playLoopPreview(payload.sequence);
+  updateStatus('Loop scheduled. Preview looping locally until stopped or 10 passes.');
 }
 
 async function renderLoop() {
@@ -517,6 +622,7 @@ function hookEvents() {
     renderRoots();
     renderChords();
     updateTuningMeta();
+    updateSelectedBarLabel();
   };
 
   rootSelect.onchange = (e) => {
@@ -575,11 +681,14 @@ function hookEvents() {
   document.getElementById('renderChordBtn').onclick = renderChord;
   document.getElementById('playLoopBtn').onclick = playLoop;
   document.getElementById('renderLoopBtn').onclick = renderLoop;
+  if (assignChordBtn) assignChordBtn.onclick = assignChordToSelectedBar;
+  if (stopLoopBtn) stopLoopBtn.onclick = () => stopLoopPreview('Stopped loop.');
 }
 
 function init() {
   hookEvents();
   syncSynthControls();
+  updateSelectedBarLabel();
   fetchTunings();
   updateStatus('Loading tunings…');
 }
