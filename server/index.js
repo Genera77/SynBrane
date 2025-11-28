@@ -86,7 +86,7 @@ function handleChords(req, res, query) {
 async function handlePlay(req, res) {
   try {
     const body = await parseBody(req);
-    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings } = body;
+    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings, loopCount } = body;
 
     if (Array.isArray(body.sequence) && body.sequence.length) {
       const events = body.sequence.map((event, index) => {
@@ -107,7 +107,7 @@ async function handlePlay(req, res) {
           frequencies,
         };
       });
-      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events, synthSettings });
+      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events, synthSettings, loopCount });
       sendJson(res, 200, { status: 'ok', playResult });
       return;
     }
@@ -130,6 +130,7 @@ async function handlePlay(req, res) {
       bpm,
       frequencies,
       synthSettings,
+      loopCount,
     });
     sendJson(res, 200, { status: 'ok', playResult });
   } catch (error) {

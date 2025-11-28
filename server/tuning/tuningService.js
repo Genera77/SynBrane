@@ -7,48 +7,65 @@ const EDO_PRESETS = {
   // 12-TET chromatic system with full major/minor families and 7th extensions.
   12: {
     label: '12-EDO (chromatic)',
-    description: 'Standard 12-TET with extended chord families across all roots.',
+    description: 'Standard 12-TET with extended and altered chord families across all roots.',
     chords: [
-      { id: '12E-major', name: 'Major triad', label: 'Type: Maj — [0,4,7]', degrees: [0, 4, 7] },
-      { id: '12E-minor', name: 'Minor triad', label: 'Type: Min — [0,3,7]', degrees: [0, 3, 7] },
-      { id: '12E-diminished', name: 'Diminished', label: 'Type: Dim — [0,3,6]', degrees: [0, 3, 6] },
-      { id: '12E-augmented', name: 'Augmented', label: 'Type: Aug — [0,4,8]', degrees: [0, 4, 8] },
-      { id: '12E-sus2', name: 'Suspended 2', label: 'Type: Sus2 — [0,2,7]', degrees: [0, 2, 7] },
-      { id: '12E-sus4', name: 'Suspended 4', label: 'Type: Sus4 — [0,5,7]', degrees: [0, 5, 7] },
-      { id: '12E-dominant7', name: 'Dominant 7', label: 'Type: Dom7 — [0,4,7,10]', degrees: [0, 4, 7, 10] },
-      { id: '12E-major7', name: 'Major 7', label: 'Type: Maj7 — [0,4,7,11]', degrees: [0, 4, 7, 11] },
-      { id: '12E-minor7', name: 'Minor 7', label: 'Type: Min7 — [0,3,7,10]', degrees: [0, 3, 7, 10] },
-      { id: '12E-half-dim7', name: 'Half-diminished 7', label: 'Type: Half-dim7 — [0,3,6,10]', degrees: [0, 3, 6, 10] },
-      { id: '12E-add9', name: 'Add9', label: 'Type: Add9 — [0,4,7,14]', degrees: [0, 4, 7, 14] },
-      { id: '12E-sixth', name: 'Sixth chord', label: 'Type: 6 — [0,4,7,9]', degrees: [0, 4, 7, 9] },
+      { id: '12E-major', name: 'Major triad', label: '12-EDO major triad [0,4,7]', degrees: [0, 4, 7] },
+      { id: '12E-minor', name: 'Minor triad', label: '12-EDO minor triad [0,3,7]', degrees: [0, 3, 7] },
+      { id: '12E-diminished', name: 'Diminished', label: '12-EDO diminished [0,3,6]', degrees: [0, 3, 6] },
+      { id: '12E-augmented', name: 'Augmented', label: '12-EDO augmented [0,4,8]', degrees: [0, 4, 8] },
+      { id: '12E-sus2', name: 'Suspended 2', label: '12-EDO sus2 [0,2,7]', degrees: [0, 2, 7] },
+      { id: '12E-sus4', name: 'Suspended 4', label: '12-EDO sus4 [0,5,7]', degrees: [0, 5, 7] },
+      { id: '12E-sixth', name: 'Sixth chord', label: '12-EDO 6 chord [0,4,7,9]', degrees: [0, 4, 7, 9] },
+      { id: '12E-add9', name: 'Add9', label: '12-EDO add9 [0,4,7,14]', degrees: [0, 4, 7, 14] },
+      { id: '12E-dominant7', name: 'Dominant 7', label: '12-EDO dom7 [0,4,7,10]', degrees: [0, 4, 7, 10] },
+      { id: '12E-major7', name: 'Major 7', label: '12-EDO maj7 [0,4,7,11]', degrees: [0, 4, 7, 11] },
+      { id: '12E-minor7', name: 'Minor 7', label: '12-EDO min7 [0,3,7,10]', degrees: [0, 3, 7, 10] },
+      { id: '12E-half-dim7', name: 'Half-diminished 7', label: '12-EDO half-diminished 7 [0,3,6,10]', degrees: [0, 3, 6, 10] },
+      { id: '12E-dominant9', name: 'Dominant 9', label: '12-EDO dom9 [0,4,7,10,14]', degrees: [0, 4, 7, 10, 14] },
+      { id: '12E-major9', name: 'Major 9', label: '12-EDO maj9 [0,4,7,11,14]', degrees: [0, 4, 7, 11, 14] },
+      { id: '12E-dominant11', name: 'Dominant 11', label: '12-EDO dom11 [0,4,7,10,14,17]', degrees: [0, 4, 7, 10, 14, 17] },
+      { id: '12E-major11', name: 'Major 11', label: '12-EDO maj11 [0,4,7,11,14,17]', degrees: [0, 4, 7, 11, 14, 17] },
+      { id: '12E-dominant13', name: 'Dominant 13', label: '12-EDO dom13 [0,4,7,10,14,17,21]', degrees: [0, 4, 7, 10, 14, 17, 21] },
+      { id: '12E-major13', name: 'Major 13', label: '12-EDO maj13 [0,4,7,11,14,17,21]', degrees: [0, 4, 7, 11, 14, 17, 21] },
+      { id: '12E-alt-b9', name: 'Altered dom b9', label: '12-EDO altered dom (b9) [0,4,7,10,13]', degrees: [0, 4, 7, 10, 13] },
+      { id: '12E-alt-sharp9', name: '#9 altered dom', label: '12-EDO altered dom (#9) [0,4,7,10,15]', degrees: [0, 4, 7, 10, 15] },
+      { id: '12E-alt-b5', name: 'Altered dom b5', label: '12-EDO altered dom (b5) [0,4,6,10]', degrees: [0, 4, 6, 10] },
+      { id: '12E-alt-sharp5', name: '#5 altered dom', label: '12-EDO altered dom (#5) [0,4,8,10]', degrees: [0, 4, 8, 10] },
+      { id: '12E-quartal', name: 'Quartal stack', label: '12-EDO quartal stack [0,5,10,15]', degrees: [0, 5, 10, 15] },
+      { id: '12E-quintal', name: 'Quintal stack', label: '12-EDO quintal stack [0,7,14]', degrees: [0, 7, 14] },
+      { id: '12E-cluster-tight', name: 'Cluster 0-1-2', label: '12-EDO cluster [0,1,2]', degrees: [0, 1, 2] },
+      { id: '12E-cluster-0235', name: 'Cluster 0-2-3-5', label: '12-EDO cluster [0,2,3,5]', degrees: [0, 2, 3, 5] },
     ],
     rootCount: 12,
   },
   // 19-EDO with 4:5:6-like triads and additional color spreads.
   19: {
     label: '19-EDO',
-    description: '19-tone equal temperament with 4:5:6-like color and microtonal spreads.',
+    description: '19-tone equal temperament with 4:5:6-like color, clusters, and stacked shapes.',
     chords: [
-      { id: '19E-major-like', name: 'Major-like triad', label: 'Pattern: [0,6,10] (≈4:5:6)', degrees: [0, 6, 10] },
-      { id: '19E-minor-like', name: 'Minor-like triad', label: 'Pattern: [0,5,10] (≈10:12:15)', degrees: [0, 5, 10] },
-      { id: '19E-dominantish', name: 'Dominant-like 7', label: 'Pattern: [0,6,10,14] (b7 color)', degrees: [0, 6, 10, 14] },
-      { id: '19E-color-wide', name: 'Wide color chord', label: 'Pattern: [0,8,11] (bright stretch)', degrees: [0, 8, 11] },
-      { id: '19E-color-narrow', name: 'Narrow color chord', label: 'Pattern: [0,3,9] (clustered)', degrees: [0, 3, 9] },
-      { id: '19E-sus', name: 'Suspended flavor', label: 'Pattern: [0,6,9,14] (open sus)', degrees: [0, 6, 9, 14] },
+      { id: '19E-major-like', name: 'Major-like triad', label: '19-EDO major-like triad (root + 6 + 10)', degrees: [0, 6, 10] },
+      { id: '19E-minor-like', name: 'Minor-like triad', label: '19-EDO minor-like triad (root + 5 + 10)', degrees: [0, 5, 10] },
+      { id: '19E-dominantish', name: 'Dominant-like 7', label: '19-EDO dominant-like 7 (0,6,10,14)', degrees: [0, 6, 10, 14] },
+      { id: '19E-quartal', name: 'Stacked fourths', label: '19-EDO stack of 4ths (0,5,10,15)', degrees: [0, 5, 10, 15] },
+      { id: '19E-tight-cluster', name: 'Tight cluster', label: '19-EDO cluster (0,1,3)', degrees: [0, 1, 3] },
+      { id: '19E-wide-spread', name: 'Wide spread', label: '19-EDO spread (0,9,15)', degrees: [0, 9, 15] },
+      { id: '19E-color-weave', name: 'Woven steps', label: '19-EDO weave (0,4,9,13)', degrees: [0, 4, 9, 13] },
     ],
     rootCount: 38,
   },
   // 24-EDO quarter-tone terrain with neutral thirds and tight clusters.
   24: {
     label: '24-EDO',
-    description: 'Quarter-tone 24-EDO with neutral and clustered colors.',
+    description: 'Quarter-tone 24-EDO with neutral, bright, and clustered colors.',
     chords: [
-      { id: '24E-neutral', name: 'Neutral triad', label: 'Pattern: [0,7,14] (neutral third/fifth)', degrees: [0, 7, 14] },
-      { id: '24E-majorish', name: 'Bright quarter triad', label: 'Pattern: [0,8,14] (major-ish)', degrees: [0, 8, 14] },
-      { id: '24E-minorish', name: 'Soft quarter triad', label: 'Pattern: [0,6,14] (minor-ish)', degrees: [0, 6, 14] },
-      { id: '24E-cluster', name: 'Quarter-tone cluster', label: 'Pattern: [0,1,7,13] (tight cluster)', degrees: [0, 1, 7, 13] },
-      { id: '24E-sus-color', name: 'Suspended color', label: 'Pattern: [0,6,12,18] (stacked fourths)', degrees: [0, 6, 12, 18] },
-      { id: '24E-extended', name: 'Extended shimmer', label: 'Pattern: [0,8,14,20] (wide top)', degrees: [0, 8, 14, 20] },
+      { id: '24E-neutral', name: 'Neutral triad', label: '24-EDO neutral triad (0,7,14)', degrees: [0, 7, 14] },
+      { id: '24E-majorish', name: 'Bright quarter triad', label: '24-EDO major-like triad (0,8,14)', degrees: [0, 8, 14] },
+      { id: '24E-minorish', name: 'Soft quarter triad', label: '24-EDO minor-like triad (0,6,14)', degrees: [0, 6, 14] },
+      { id: '24E-dominant', name: 'Dominant-like 7', label: '24-EDO dominant-like 7 (0,8,14,20)', degrees: [0, 8, 14, 20] },
+      { id: '24E-stack-4ths', name: 'Stacked fourths', label: '24-EDO stack of 4ths (0,6,12,18)', degrees: [0, 6, 12, 18] },
+      { id: '24E-tight-cluster', name: 'Tight cluster', label: '24-EDO cluster (0,1,3,7)', degrees: [0, 1, 3, 7] },
+      { id: '24E-wide-color', name: 'Wide color spread', label: '24-EDO spread (0,10,18)', degrees: [0, 10, 18] },
+      { id: '24E-extended', name: 'Extended shimmer', label: '24-EDO extended color (0,8,14,21)', degrees: [0, 8, 14, 21] },
     ],
     rootCount: 48,
   },
@@ -57,12 +74,14 @@ const EDO_PRESETS = {
     label: '32-EDO',
     description: 'Dense microtonal 32-EDO showcasing small-step color.',
     chords: [
-      { id: '32E-steps-235', name: 'Step weave', label: 'Pattern: [0,2,5,9] (2/3/5 steps)', degrees: [0, 2, 5, 9] },
-      { id: '32E-steps-357', name: 'Cascading 3/5/7', label: 'Pattern: [0,3,7,12] (3/5/7 steps)', degrees: [0, 3, 7, 12] },
-      { id: '32E-bright', name: 'Bright fifth stack', label: 'Pattern: [0,5,10,17] (stacked fifth-ish)', degrees: [0, 5, 10, 17] },
-      { id: '32E-color', name: 'Color lattice', label: 'Pattern: [0,7,14,21] (sevenths apart)', degrees: [0, 7, 14, 21] },
-      { id: '32E-tight', name: 'Tight micro cluster', label: 'Pattern: [0,2,4,7] (close lead)', degrees: [0, 2, 4, 7] },
-      { id: '32E-wide', name: 'Wide micro spread', label: 'Pattern: [0,5,11,19] (arching spread)', degrees: [0, 5, 11, 19] },
+      { id: '32E-major-like', name: 'Major-like triad', label: '32-EDO major-like triad (0,10,19)', degrees: [0, 10, 19] },
+      { id: '32E-minor-like', name: 'Minor-like triad', label: '32-EDO minor-like triad (0,8,19)', degrees: [0, 8, 19] },
+      { id: '32E-dominantish', name: 'Dominant-like 7', label: '32-EDO dominant-like 7 (0,10,19,27)', degrees: [0, 10, 19, 27] },
+      { id: '32E-stacked-4ths', name: 'Stacked fourths', label: '32-EDO stack of 4ths (0,13,26)', degrees: [0, 13, 26] },
+      { id: '32E-tight', name: 'Tight micro cluster', label: '32-EDO cluster (0,1,3,7)', degrees: [0, 1, 3, 7] },
+      { id: '32E-color-weave', name: 'Step weave', label: '32-EDO weave (0,2,5,9)', degrees: [0, 2, 5, 9] },
+      { id: '32E-wide', name: 'Wide micro spread', label: '32-EDO spread (0,11,21,29)', degrees: [0, 11, 21, 29] },
+      { id: '32E-fifthish', name: 'Fifth-ish stack', label: '32-EDO fifth-ish stack (0,7,14,21)', degrees: [0, 7, 14, 21] },
     ],
     rootCount: 64,
   },
@@ -118,16 +137,22 @@ function generateEdoChords(stepCount) {
 function generateScalaChords(intervals, name) {
   if (!intervals.length) return [];
   const chords = [];
-  for (let i = 0; i < Math.min(intervals.length, 5); i += 1) {
-    const base = i;
-    const triad = [base, base + 2, base + 4].filter((d) => d < intervals.length);
-    const tetrad = [base, base + 1, base + 3, base + 6].filter((d) => d < intervals.length);
-    if (triad.length >= 3) {
-      chords.push({ id: `scala-${name}-triad-${base}`, name: `Triad from degree ${base + 1}`, label: `Triad (degree ${base + 1})`, degrees: triad });
-    }
-    if (tetrad.length >= 3) {
-      chords.push({ id: `scala-${name}-color-${base}`, name: `Color chord ${base + 1}`, label: `Color chord (degree ${base + 1})`, degrees: tetrad });
-    }
+  const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  for (let degree = 0; degree < intervals.length; degree += 1) {
+    const triad = [degree, degree + 2, degree + 4];
+    const seventh = [degree, degree + 2, degree + 4, degree + 6];
+    chords.push({
+      id: `scala-${safeName}-triad-${degree}`,
+      name: `Deg ${degree} triad (1-3-5)`,
+      label: `Deg ${degree} triad (1-3-5)`,
+      degrees: triad,
+    });
+    chords.push({
+      id: `scala-${safeName}-7th-${degree}`,
+      name: `Deg ${degree} seventh (1-3-5-7)`,
+      label: `Deg ${degree} seventh (1-3-5-7)`,
+      degrees: seventh,
+    });
   }
   return chords;
 }
