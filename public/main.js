@@ -10,6 +10,19 @@ const statusEl = document.getElementById('status');
 const tuningMeta = document.getElementById('tuningMeta');
 const barsContainer = document.getElementById('barsContainer');
 const player = document.getElementById('player');
+const waveformSelect = document.getElementById('waveform');
+const attackInput = document.getElementById('attack');
+const attackLabel = document.getElementById('attackLabel');
+const decayInput = document.getElementById('decay');
+const decayLabel = document.getElementById('decayLabel');
+const sustainInput = document.getElementById('sustain');
+const sustainLabel = document.getElementById('sustainLabel');
+const releaseInput = document.getElementById('release');
+const releaseLabel = document.getElementById('releaseLabel');
+const cutoffInput = document.getElementById('cutoff');
+const cutoffLabel = document.getElementById('cutoffLabel');
+const resonanceInput = document.getElementById('resonance');
+const resonanceLabel = document.getElementById('resonanceLabel');
 
 const state = {
   tunings: [],
@@ -22,10 +35,29 @@ const state = {
   mode: 'harmony',
   bpm: 120,
   rhythmSpeed: 0.01,
+  synth: {
+    waveform: 'saw',
+    envelope: {
+      attackMs: 40,
+      decayMs: 200,
+      sustainLevel: 0.7,
+      releaseMs: 800,
+    },
+    filter: {
+      cutoffHz: 12000,
+      resonance: 0.2,
+    },
+  },
 };
 
 function updateStatus(text) {
   statusEl.textContent = text;
+}
+
+function updateTuningMeta() {
+  const tuning = getTuning(state.selectedTuningId);
+  const detail = tuning?.description ? ` · ${tuning.description}` : '';
+  tuningMeta.textContent = `Base frequency ${state.baseFrequency} Hz${detail}`;
 }
 
 function getTuning(tuningId) {
@@ -38,13 +70,33 @@ function getChord(tuningId, chordId) {
   return cache.chords.find((chord) => chord.id === chordId);
 }
 
+function updateSynthLabels() {
+  attackLabel.textContent = `${state.synth.envelope.attackMs} ms`;
+  decayLabel.textContent = `${state.synth.envelope.decayMs} ms`;
+  sustainLabel.textContent = state.synth.envelope.sustainLevel.toFixed(2);
+  releaseLabel.textContent = `${state.synth.envelope.releaseMs} ms`;
+  cutoffLabel.textContent = `${state.synth.filter.cutoffHz} Hz`;
+  resonanceLabel.textContent = state.synth.filter.resonance.toFixed(2);
+}
+
+function syncSynthControls() {
+  waveformSelect.value = state.synth.waveform;
+  attackInput.value = state.synth.envelope.attackMs;
+  decayInput.value = state.synth.envelope.decayMs;
+  sustainInput.value = state.synth.envelope.sustainLevel;
+  releaseInput.value = state.synth.envelope.releaseMs;
+  cutoffInput.value = state.synth.filter.cutoffHz;
+  resonanceInput.value = state.synth.filter.resonance;
+  updateSynthLabels();
+}
+
 async function fetchTunings() {
   const res = await fetch('/api/tunings');
   const data = await res.json();
   state.tunings = data.tunings || [];
   state.baseFrequency = data.baseFrequency || 440;
   state.selectedTuningId = state.tunings[0]?.id || null;
-  tuningMeta.textContent = `Base frequency ${state.baseFrequency} Hz`;
+  updateTuningMeta();
   if (state.selectedTuningId) {
     await ensureChords(state.selectedTuningId);
     seedSelections();
@@ -108,7 +160,7 @@ function renderChords() {
   chords.forEach((chord) => {
     const item = document.createElement('div');
     item.className = 'chord-item';
-    item.textContent = `${chord.label || chord.name} — degrees ${chord.degrees.join(', ')}`;
+    item.textContent = `${chord.label || chord.name} — pattern [${chord.degrees.join(', ')}]`;
     item.onclick = () => {
       state.selectedChordId = chord.id;
       document.querySelectorAll('.chord-item').forEach((el) => el.classList.remove('active'));
@@ -184,7 +236,7 @@ function renderBars() {
     chordOptions.forEach((chord) => {
       const option = document.createElement('option');
       option.value = chord.id;
-      option.textContent = chord.label || chord.name;
+      option.textContent = `${chord.label || chord.name}`;
       chordSelectEl.appendChild(option);
     });
     chordSelectEl.value = bar.chordId;
@@ -270,18 +322,42 @@ function createPercussiveHit(ctx, startTime, {
   gain.connect(ctx.destination);
 }
 
-function scheduleHarmony(ctx, startTime, duration, freqs) {
+function scheduleHarmony(ctx, startTime, duration, freqs, synthSettings) {
+  const synth = synthSettings || state.synth;
   const amp = 0.5 / Math.max(freqs.length, 1);
+  const attack = synth.envelope.attackMs / 1000;
+  const decay = synth.envelope.decayMs / 1000;
+  const sustainLevel = synth.envelope.sustainLevel;
+  const release = synth.envelope.releaseMs / 1000;
+  const sustainTime = Math.max(0, duration - attack - decay);
+
   freqs.forEach((freq) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    const useFilter = synth.filter && synth.filter.cutoffHz;
+    const destination = useFilter ? ctx.createBiquadFilter() : gain;
+
     osc.frequency.value = freq;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(amp, startTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-    osc.connect(gain).connect(ctx.destination);
+    osc.type = synth.waveform === 'square' ? 'square' : synth.waveform === 'saw' ? 'sawtooth' : 'sine';
+
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.linearRampToValueAtTime(amp, startTime + attack);
+    gain.gain.linearRampToValueAtTime(amp * sustainLevel, startTime + attack + decay);
+    gain.gain.setValueAtTime(amp * sustainLevel, startTime + attack + decay + sustainTime);
+    gain.gain.linearRampToValueAtTime(0.0001, startTime + attack + decay + sustainTime + release);
+
+    if (useFilter) {
+      destination.type = 'lowpass';
+      destination.frequency.value = synth.filter.cutoffHz;
+      destination.Q.value = 0.5 + (synth.filter.resonance || 0) * 11.5;
+      osc.connect(destination).connect(gain).connect(ctx.destination);
+    } else {
+      osc.connect(gain).connect(ctx.destination);
+    }
+
+    const stopTime = startTime + attack + decay + sustainTime + release + 0.05;
     osc.start(startTime);
-    osc.stop(startTime + duration);
+    osc.stop(stopTime);
   });
 }
 
@@ -319,7 +395,7 @@ function playChordPreview(event) {
   if (state.mode === 'rhythm') {
     scheduleRhythm(ctx, start, duration, freqs);
   } else {
-    scheduleHarmony(ctx, start, duration, freqs);
+    scheduleHarmony(ctx, start, duration, freqs, state.synth);
   }
 }
 
@@ -335,7 +411,7 @@ function playSequencePreview(events) {
     if (state.mode === 'rhythm') {
       scheduleRhythm(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
     } else {
-      scheduleHarmony(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
+      scheduleHarmony(ctx, eventStart, barDuration * (event.durationBars || 1), freqs, state.synth);
     }
   });
 }
@@ -350,6 +426,7 @@ function buildChordPayload() {
     mode: state.mode,
     bpm: state.bpm,
     rhythmSpeed: state.rhythmSpeed,
+    synthSettings: state.synth,
   };
 }
 
@@ -366,6 +443,7 @@ function buildLoopPayload() {
     mode: state.mode,
     bpm: state.bpm,
     rhythmSpeed: state.rhythmSpeed,
+    synthSettings: state.synth,
     sequence,
   };
 }
@@ -438,6 +516,7 @@ function hookEvents() {
     await ensureChords(state.selectedTuningId);
     renderRoots();
     renderChords();
+    updateTuningMeta();
   };
 
   rootSelect.onchange = (e) => {
@@ -458,6 +537,40 @@ function hookEvents() {
     rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(3)}× pitch → beat`;
   };
 
+  waveformSelect.onchange = (e) => {
+    state.synth.waveform = e.target.value;
+  };
+
+  attackInput.oninput = (e) => {
+    state.synth.envelope.attackMs = Number(e.target.value);
+    updateSynthLabels();
+  };
+
+  decayInput.oninput = (e) => {
+    state.synth.envelope.decayMs = Number(e.target.value);
+    updateSynthLabels();
+  };
+
+  sustainInput.oninput = (e) => {
+    state.synth.envelope.sustainLevel = Number(e.target.value);
+    updateSynthLabels();
+  };
+
+  releaseInput.oninput = (e) => {
+    state.synth.envelope.releaseMs = Number(e.target.value);
+    updateSynthLabels();
+  };
+
+  cutoffInput.oninput = (e) => {
+    state.synth.filter.cutoffHz = Number(e.target.value);
+    updateSynthLabels();
+  };
+
+  resonanceInput.oninput = (e) => {
+    state.synth.filter.resonance = Number(e.target.value);
+    updateSynthLabels();
+  };
+
   document.getElementById('playChordBtn').onclick = playChord;
   document.getElementById('renderChordBtn').onclick = renderChord;
   document.getElementById('playLoopBtn').onclick = playLoop;
@@ -466,6 +579,7 @@ function hookEvents() {
 
 function init() {
   hookEvents();
+  syncSynthControls();
   fetchTunings();
   updateStatus('Loading tunings…');
 }

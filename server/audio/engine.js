@@ -31,24 +31,148 @@ function applyNormalization(samples, targetDb = -4) {
   return { gain, peak };
 }
 
-function exponentialDecayEnvelope(length, sampleRate, decayTime, endLevel = 0.0001) {
-  const envelope = new Float32Array(length);
-  const decaySamples = Math.max(1, Math.floor(decayTime * sampleRate));
-  const decayRate = Math.log(endLevel) / decaySamples;
-  for (let i = 0; i < length; i += 1) {
-    const position = Math.min(i, decaySamples);
-    envelope[i] = Math.exp(decayRate * position);
-  }
-  return envelope;
+function mapFrequenciesToRhythm(frequencies, mappingFactor) {
+  return frequencies.map((freq) => Math.max(0.5, freq * mappingFactor));
 }
 
-function addHarmonicTone(samples, startSample, frequency, duration, sampleRate, amplitude) {
-  const totalSamples = Math.min(samples.length - startSample, Math.floor(duration * sampleRate));
-  const envelope = exponentialDecayEnvelope(totalSamples, sampleRate, duration);
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeSynthSettings(raw = {}) {
+  const envelope = raw.envelope || raw.adsr || {};
+  const filter = raw.filter || {};
+  return {
+    waveform: raw.waveform || 'saw',
+    envelope: {
+      attackMs: clamp(Number(envelope.attackMs ?? 40), 0, 5000),
+      decayMs: clamp(Number(envelope.decayMs ?? 200), 0, 5000),
+      sustainLevel: clamp(Number(envelope.sustainLevel ?? 0.7), 0, 1),
+      releaseMs: clamp(Number(envelope.releaseMs ?? 800), 0, 5000),
+    },
+    filter: {
+      cutoffHz: clamp(Number(filter.cutoffHz ?? 12000), 50, 20000),
+      resonance: clamp(Number(filter.resonance ?? 0.2), 0, 1),
+    },
+  };
+}
+
+function createAdsrEnvelope(totalSamples, sampleRate, sustainUntil, envelope) {
+  const env = new Float32Array(totalSamples);
+  const attack = envelope.attackMs / 1000;
+  const decay = envelope.decayMs / 1000;
+  const release = envelope.releaseMs / 1000;
+  const sustain = envelope.sustainLevel;
+  const sustainEnd = Math.max(sustainUntil, attack + decay);
+
   for (let i = 0; i < totalSamples; i += 1) {
     const t = i / sampleRate;
-    samples[startSample + i] += Math.sin(2 * Math.PI * frequency * t) * amplitude * envelope[i];
+    if (attack > 0 && t < attack) {
+      env[i] = t / attack;
+    } else if (decay > 0 && t < attack + decay) {
+      const progress = (t - attack) / Math.max(decay, 1e-6);
+      env[i] = 1 - (1 - sustain) * progress;
+    } else if (t < sustainEnd) {
+      env[i] = sustain;
+    } else if (release > 0) {
+      const releasePos = (t - sustainEnd) / release;
+      env[i] = Math.max(0, sustain * (1 - releasePos));
+    } else {
+      env[i] = sustain;
+    }
   }
+
+  return env;
+}
+
+function waveSample(phase, waveform) {
+  const twoPi = Math.PI * 2;
+  const wrapped = phase % twoPi;
+  if (waveform === 'square') {
+    return wrapped < Math.PI ? 1 : -1;
+  }
+  if (waveform === 'saw') {
+    return 1 - (2 * wrapped) / twoPi;
+  }
+  return Math.sin(wrapped);
+}
+
+function applyLowPassFilter(samples, sampleRate, cutoffHz, resonance = 0.2) {
+  const nyquist = sampleRate / 2;
+  const cutoff = clamp(cutoffHz, 50, nyquist - 100);
+  const q = 0.5 + resonance * 11.5; // map 0–1 to a musically useful Q span
+  const omega = (2 * Math.PI * cutoff) / sampleRate;
+  const alpha = Math.sin(omega) / (2 * q);
+  const cosw = Math.cos(omega);
+
+  const b0 = (1 - cosw) / 2;
+  const b1 = 1 - cosw;
+  const b2 = (1 - cosw) / 2;
+  const a0 = 1 + alpha;
+  const a1 = -2 * cosw;
+  const a2 = 1 - alpha;
+
+  let x1 = 0; let x2 = 0; let y1 = 0; let y2 = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const x0 = samples[i];
+    const y0 = (b0 / a0) * x0 + (b1 / a0) * x1 + (b2 / a0) * x2 - (a1 / a0) * y1 - (a2 / a0) * y2;
+    samples[i] = y0;
+    x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+  }
+}
+
+function generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor, synthSettings }) {
+  if (mode === 'rhythm') {
+    const totalSamples = Math.floor(sampleRate * duration);
+    const samples = new Float32Array(totalSamples);
+    const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 0.01);
+    rates.forEach((rate, index) => {
+      const intervalSeconds = 1 / rate;
+      const voiceIsKick = index === 0;
+      const toneFrequency = voiceIsKick ? 70 : null;
+      const toneMix = voiceIsKick ? 0.6 : 0;
+      const noiseMix = voiceIsKick ? 0.4 : 1;
+      const decay = voiceIsKick ? 0.08 : 0.025;
+      const hpCutoff = voiceIsKick ? 1800 : 3200;
+      for (let t = 0; t < duration; t += intervalSeconds) {
+        const startSample = Math.floor(t * sampleRate);
+        addPercussiveHit(samples, startSample, sampleRate, {
+          amplitude: 1 / (index + 1),
+          attack: 0.0005,
+          decay,
+          toneFrequency,
+          toneMix,
+          noiseMix,
+          highpassCutoff: hpCutoff,
+        });
+      }
+    });
+    return samples;
+  }
+
+  const synth = normalizeSynthSettings(synthSettings);
+  const baseDuration = duration || 1;
+  const releaseSeconds = synth.envelope.releaseMs / 1000;
+  const totalDuration = baseDuration + releaseSeconds;
+  const totalSamples = Math.max(1, Math.floor(sampleRate * totalDuration));
+  const samples = new Float32Array(totalSamples);
+  const envelope = createAdsrEnvelope(totalSamples, sampleRate, baseDuration, synth.envelope);
+  const amplitude = 0.5 / Math.max(frequencies.length, 1);
+
+  frequencies.forEach((freq) => {
+    let phase = 0;
+    const phaseIncrement = (2 * Math.PI * freq) / sampleRate;
+    for (let i = 0; i < totalSamples; i += 1) {
+      samples[i] += waveSample(phase, synth.waveform) * envelope[i] * amplitude;
+      phase += phaseIncrement;
+    }
+  });
+
+  if (synth.filter && synth.filter.cutoffHz) {
+    applyLowPassFilter(samples, sampleRate, synth.filter.cutoffHz, synth.filter.resonance);
+  }
+
+  return samples;
 }
 
 function addPercussiveHit(samples, startSample, sampleRate, {
@@ -96,51 +220,14 @@ function addPercussiveHit(samples, startSample, sampleRate, {
   }
 }
 
-function mapFrequenciesToRhythm(frequencies, mappingFactor) {
-  return frequencies.map((freq) => Math.max(0.5, freq * mappingFactor));
-}
-
-function generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor }) {
-  const totalSamples = Math.floor(sampleRate * duration);
-  const samples = new Float32Array(totalSamples);
-  if (mode === 'harmony') {
-    const amplitude = 0.5 / Math.max(frequencies.length, 1);
-    frequencies.forEach((freq) => {
-      addHarmonicTone(samples, 0, freq, duration, sampleRate, amplitude);
-    });
-  } else {
-    const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 0.01);
-    rates.forEach((rate, index) => {
-      const intervalSeconds = 1 / rate;
-      const voiceIsKick = index === 0;
-      const toneFrequency = voiceIsKick ? 70 : null;
-      const toneMix = voiceIsKick ? 0.6 : 0;
-      const noiseMix = voiceIsKick ? 0.4 : 1;
-      const decay = voiceIsKick ? 0.08 : 0.025;
-      const hpCutoff = voiceIsKick ? 1800 : 3200;
-      for (let t = 0; t < duration; t += intervalSeconds) {
-        const startSample = Math.floor(t * sampleRate);
-        addPercussiveHit(samples, startSample, sampleRate, {
-          amplitude: 1 / (index + 1),
-          attack: 0.0005,
-          decay,
-          toneFrequency,
-          toneMix,
-          noiseMix,
-          highpassCutoff: hpCutoff,
-        });
-      }
-    });
-  }
-  return samples;
-}
-
-function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor }) {
+function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor, synthSettings }) {
   const beatsPerBar = 4;
   const secondsPerBeat = 60 / bpm;
   const barDuration = secondsPerBeat * beatsPerBar;
+  const normalizedSynth = mode === 'harmony' ? normalizeSynthSettings(synthSettings) : null;
+  const releaseSeconds = normalizedSynth ? normalizedSynth.envelope.releaseMs / 1000 : 0;
   const totalBars = Math.max(...events.map((event) => (event.bar || 0) + (event.durationBars || 1)), 1);
-  const totalDuration = totalBars * barDuration;
+  const totalDuration = totalBars * barDuration + releaseSeconds;
   const totalSamples = Math.ceil(sampleRate * totalDuration);
   const samples = new Float32Array(totalSamples);
 
@@ -148,10 +235,9 @@ function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor 
     const startTime = barDuration * (event.bar || 0);
     const duration = barDuration * (event.durationBars || 1);
     const startSample = Math.floor(startTime * sampleRate);
-    const endSample = Math.min(totalSamples, Math.floor((startTime + duration) * sampleRate));
-    const localSamples = endSample - startSample;
-    const buffer = generateChordSamples({ mode, frequencies: event.frequencies, duration, sampleRate, mappingFactor });
-    for (let i = 0; i < localSamples; i += 1) {
+    const buffer = generateChordSamples({ mode, frequencies: event.frequencies, duration, sampleRate, mappingFactor, synthSettings: normalizedSynth || synthSettings });
+    const copyLength = Math.min(buffer.length, samples.length - startSample);
+    for (let i = 0; i < copyLength; i += 1) {
       samples[startSample + i] += buffer[i];
     }
   });
@@ -184,15 +270,15 @@ function encodeWav(samples, sampleRate) {
   return buffer;
 }
 
-function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed, events, bpm }) {
+function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed, events, bpm, synthSettings }) {
   ensureDir(config.renderOutputDir);
   const sampleRate = config.renderSampleRate;
   const effectiveMapping = rhythmSpeed ?? mappingFactor;
   let samples;
   if (Array.isArray(events) && events.length) {
-    samples = generateSequenceSamples({ mode, events, bpm: bpm || 120, sampleRate, mappingFactor: effectiveMapping });
+    samples = generateSequenceSamples({ mode, events, bpm: bpm || 120, sampleRate, mappingFactor: effectiveMapping, synthSettings });
   } else {
-    samples = generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor: effectiveMapping });
+    samples = generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor: effectiveMapping, synthSettings });
   }
   applyNormalization(samples);
   const wav = encodeWav(samples, sampleRate);
@@ -207,7 +293,7 @@ function playRealtime(job) {
   // send OSC messages or score data to scsynth/sclang. Here we simply log the
   // job so that the backend can be wired to a sound engine later.
   // eslint-disable-next-line no-console
-  console.log('[playRealtime]', job);
+  console.log('[playRealtime]', { ...job, synthSettings: normalizeSynthSettings(job.synthSettings) });
   return { status: 'scheduled' };
 }
 
