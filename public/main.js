@@ -218,19 +218,60 @@ function frequenciesForEvent(event) {
   return chord.degrees.map((degree) => degreeToFrequency(event.tuningId, degree + Number(event.root || 0)));
 }
 
-function createClickOsc(ctx, startTime, duration, amplitude) {
-  const osc = ctx.createOscillator();
+function createPercussiveHit(ctx, startTime, {
+  amplitude = 0.9,
+  attack = 0.0005,
+  decay = 0.025,
+  toneFrequency = null,
+  toneMix = 0,
+  noiseMix = 1,
+  highpass = 3000,
+} = {}) {
+  const duration = attack + decay + 0.02;
   const gain = ctx.createGain();
-  osc.frequency.value = 160;
-  gain.gain.setValueAtTime(amplitude, startTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(startTime);
-  osc.stop(startTime + duration);
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(amplitude, startTime + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + attack + decay);
+
+  if (noiseMix > 0) {
+    const noiseBuffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = noiseMix;
+    if (highpass) {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = highpass;
+      noise.connect(filter).connect(noiseGain);
+    } else {
+      noise.connect(noiseGain);
+    }
+    noiseGain.connect(gain);
+    noise.start(startTime);
+    noise.stop(startTime + duration);
+  }
+
+  if (toneMix > 0 && toneFrequency) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = toneFrequency;
+    const toneGain = ctx.createGain();
+    toneGain.gain.value = toneMix;
+    osc.connect(toneGain).connect(gain);
+    osc.start(startTime);
+    osc.stop(startTime + attack + decay + 0.05);
+  }
+
+  gain.connect(ctx.destination);
 }
 
 function scheduleHarmony(ctx, startTime, duration, freqs) {
-  const amp = 0.4 / Math.max(freqs.length, 1);
+  const amp = 0.5 / Math.max(freqs.length, 1);
   freqs.forEach((freq) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -245,12 +286,26 @@ function scheduleHarmony(ctx, startTime, duration, freqs) {
 }
 
 function scheduleRhythm(ctx, startTime, duration, freqs) {
-  const amp = 0.25;
+  const baseAmp = 0.8;
   freqs.forEach((freq, index) => {
     const rate = Math.max(0.5, freq * state.rhythmSpeed);
     const interval = 1 / rate;
+    const voiceIsKick = index === 0;
+    const toneFrequency = voiceIsKick ? 70 : null;
+    const toneMix = voiceIsKick ? 0.6 : 0;
+    const noiseMix = voiceIsKick ? 0.4 : 1;
+    const decay = voiceIsKick ? 0.08 : 0.025;
+    const highpass = voiceIsKick ? 1800 : 3200;
     for (let t = 0; t < duration; t += interval) {
-      createClickOsc(ctx, startTime + t, 0.08, amp / (index + 1));
+      createPercussiveHit(ctx, startTime + t, {
+        amplitude: baseAmp / (index + 1),
+        attack: 0.0005,
+        decay,
+        toneFrequency,
+        toneMix,
+        noiseMix,
+        highpass,
+      });
     }
   });
 }

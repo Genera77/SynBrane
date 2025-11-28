@@ -8,6 +8,94 @@ function ensureDir(dir) {
   }
 }
 
+function dbToLinear(db) {
+  return 10 ** (db / 20);
+}
+
+function applyNormalization(samples, targetDb = -4) {
+  const targetPeak = dbToLinear(targetDb);
+  let peak = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    peak = Math.max(peak, Math.abs(samples[i]));
+  }
+
+  if (peak === 0) {
+    return { gain: 1, peak };
+  }
+
+  const gain = targetPeak / peak;
+  for (let i = 0; i < samples.length; i += 1) {
+    samples[i] *= gain;
+  }
+
+  return { gain, peak };
+}
+
+function exponentialDecayEnvelope(length, sampleRate, decayTime, endLevel = 0.0001) {
+  const envelope = new Float32Array(length);
+  const decaySamples = Math.max(1, Math.floor(decayTime * sampleRate));
+  const decayRate = Math.log(endLevel) / decaySamples;
+  for (let i = 0; i < length; i += 1) {
+    const position = Math.min(i, decaySamples);
+    envelope[i] = Math.exp(decayRate * position);
+  }
+  return envelope;
+}
+
+function addHarmonicTone(samples, startSample, frequency, duration, sampleRate, amplitude) {
+  const totalSamples = Math.min(samples.length - startSample, Math.floor(duration * sampleRate));
+  const envelope = exponentialDecayEnvelope(totalSamples, sampleRate, duration);
+  for (let i = 0; i < totalSamples; i += 1) {
+    const t = i / sampleRate;
+    samples[startSample + i] += Math.sin(2 * Math.PI * frequency * t) * amplitude * envelope[i];
+  }
+}
+
+function addPercussiveHit(samples, startSample, sampleRate, {
+  amplitude = 1,
+  attack = 0.001,
+  decay = 0.02,
+  toneFrequency = null,
+  toneMix = 0,
+  noiseMix = 1,
+  highpassCutoff = 2500,
+} = {}) {
+  const attackSamples = Math.max(1, Math.floor(attack * sampleRate));
+  const decaySamples = Math.max(1, Math.floor(decay * sampleRate));
+  const totalSamples = attackSamples + decaySamples;
+  const dt = 1 / sampleRate;
+  const rc = 1 / (2 * Math.PI * highpassCutoff);
+  const alpha = rc / (rc + dt);
+  let prevY = 0;
+  let prevX = 0;
+
+  for (let i = 0; i < totalSamples; i += 1) {
+    const env = i < attackSamples
+      ? i / attackSamples
+      : 1 - (i - attackSamples) / decaySamples;
+    const time = i / sampleRate;
+    let sampleValue = 0;
+
+    if (noiseMix > 0) {
+      let noise = Math.random() * 2 - 1;
+      const y = alpha * (prevY + noise - prevX);
+      prevY = y;
+      prevX = noise;
+      noise = y;
+      sampleValue += noise * noiseMix;
+    }
+
+    if (toneMix > 0 && toneFrequency) {
+      sampleValue += Math.sin(2 * Math.PI * toneFrequency * time) * toneMix;
+    }
+
+    const targetIndex = startSample + i;
+    if (targetIndex < samples.length) {
+      samples[targetIndex] += sampleValue * env * amplitude;
+    }
+  }
+}
+
 function mapFrequenciesToRhythm(frequencies, mappingFactor) {
   return frequencies.map((freq) => Math.max(0.5, freq * mappingFactor));
 }
@@ -16,26 +104,31 @@ function generateChordSamples({ mode, frequencies, duration, sampleRate, mapping
   const totalSamples = Math.floor(sampleRate * duration);
   const samples = new Float32Array(totalSamples);
   if (mode === 'harmony') {
-    const amplitude = 0.6 / Math.max(frequencies.length, 1);
-    for (let i = 0; i < totalSamples; i += 1) {
-      const t = i / sampleRate;
-      let value = 0;
-      frequencies.forEach((freq) => {
-        value += Math.sin(2 * Math.PI * freq * t);
-      });
-      samples[i] = value * amplitude;
-    }
+    const amplitude = 0.5 / Math.max(frequencies.length, 1);
+    frequencies.forEach((freq) => {
+      addHarmonicTone(samples, 0, freq, duration, sampleRate, amplitude);
+    });
   } else {
     const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 0.01);
     rates.forEach((rate, index) => {
-      const clickSpacing = Math.max(1, sampleRate / rate);
-      for (let sample = 0; sample < totalSamples; sample += 1) {
-        const position = sample % Math.floor(clickSpacing);
-        if (position === 0) {
-          const amplitude = 0.4 / (index + 1);
-          samples[sample] += amplitude;
-          if (sample + 1 < totalSamples) samples[sample + 1] += amplitude * 0.6;
-        }
+      const intervalSeconds = 1 / rate;
+      const voiceIsKick = index === 0;
+      const toneFrequency = voiceIsKick ? 70 : null;
+      const toneMix = voiceIsKick ? 0.6 : 0;
+      const noiseMix = voiceIsKick ? 0.4 : 1;
+      const decay = voiceIsKick ? 0.08 : 0.025;
+      const hpCutoff = voiceIsKick ? 1800 : 3200;
+      for (let t = 0; t < duration; t += intervalSeconds) {
+        const startSample = Math.floor(t * sampleRate);
+        addPercussiveHit(samples, startSample, sampleRate, {
+          amplitude: 1 / (index + 1),
+          attack: 0.0005,
+          decay,
+          toneFrequency,
+          toneMix,
+          noiseMix,
+          highpassCutoff: hpCutoff,
+        });
       }
     });
   }
@@ -101,6 +194,7 @@ function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed,
   } else {
     samples = generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor: effectiveMapping });
   }
+  applyNormalization(samples);
   const wav = encodeWav(samples, sampleRate);
   const filename = `render-${mode}-${Date.now()}.wav`;
   const filePath = path.join(config.renderOutputDir, filename);
