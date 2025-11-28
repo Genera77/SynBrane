@@ -9,48 +9,52 @@
   <body>
     <header>
       <h1>SynBrane</h1>
-      <p>Experimental tuning and chord explorer with harmony ↔ rhythm mapping.</p>
+      <p>Explore tunings, choose chords with roots, and stitch a 4-bar loop for harmony or rhythm playback.</p>
     </header>
     <main>
       <section class="panel">
-        <h2>Tuning</h2>
-        <label>Type
-          <select id="tuningType">
-            <option value="edo">EDO</option>
-            <option value="scala">Scala</option>
-          </select>
+        <h2>Tuning library</h2>
+        <label>Tuning
+          <select id="tuningSelect"></select>
         </label>
-        <label id="edoStepsLabel">Steps per octave
-          <input id="edoSteps" type="number" min="5" max="48" value="12" />
-        </label>
-        <label id="scalaLabel" class="hidden">Scala scale
-          <select id="scalaSelect"></select>
+        <label>Root note
+          <select id="rootSelect"></select>
         </label>
         <div id="tuningMeta" class="meta"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Chords</h2>
         <div id="chordList"></div>
       </section>
 
       <section class="panel">
+        <h2>Sequencer (4 bars)</h2>
+        <p class="meta">Each bar holds one chord. Mix tunings freely.</p>
+        <div id="barsContainer" class="bars"></div>
+      </section>
+
+      <section class="panel">
         <h2>Playback</h2>
-        <label>Mode
-          <select id="modeSelect">
-            <option value="harmony">Harmony</option>
-            <option value="rhythm">Rhythm</option>
-          </select>
-        </label>
-        <label>Duration (seconds)
-          <input id="duration" type="number" min="1" max="12" step="0.5" value="4" />
-        </label>
-        <label>Pitch→rate factor (for rhythms)
-          <input id="mappingFactor" type="number" min="0.0001" max="1" step="0.001" value="0.01" />
-        </label>
+        <div class="control-grid">
+          <label>Mode
+            <select id="modeSelect">
+              <option value="harmony">Harmony</option>
+              <option value="rhythm">Rhythm</option>
+            </select>
+          </label>
+          <label>Tempo (BPM)
+            <input id="bpm" type="range" min="40" max="240" value="120" />
+            <span class="meta" id="bpmLabel">120 BPM</span>
+          </label>
+          <label>Rhythm speed / mapping
+            <input id="rhythmSpeed" type="range" min="0.001" max="0.05" step="0.001" value="0.01" />
+            <span class="meta" id="rhythmLabel">0.010× pitch → beat</span>
+          </label>
+        </div>
         <div class="actions">
-          <button id="playBtn">Play</button>
-          <button id="renderBtn">Render & Export</button>
+          <button id="playChordBtn">Play chord</button>
+          <button id="renderChordBtn">Render chord</button>
+        </div>
+        <div class="actions">
+          <button id="playLoopBtn">Play 4-bar loop</button>
+          <button id="renderLoopBtn">Render 4-bar loop</button>
         </div>
         <div id="status" class="meta"></div>
         <audio id="player" controls class="hidden"></audio>

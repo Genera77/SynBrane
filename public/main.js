@@ -1,169 +1,418 @@
 const chordList = document.getElementById('chordList');
-const tuningTypeSelect = document.getElementById('tuningType');
-const edoStepsInput = document.getElementById('edoSteps');
-const scalaSelect = document.getElementById('scalaSelect');
-const scalaLabel = document.getElementById('scalaLabel');
-const edoLabel = document.getElementById('edoStepsLabel');
+const tuningSelect = document.getElementById('tuningSelect');
+const rootSelect = document.getElementById('rootSelect');
 const modeSelect = document.getElementById('modeSelect');
-const durationInput = document.getElementById('duration');
-const mappingFactorInput = document.getElementById('mappingFactor');
+const bpmInput = document.getElementById('bpm');
+const bpmLabel = document.getElementById('bpmLabel');
+const rhythmSpeedInput = document.getElementById('rhythmSpeed');
+const rhythmLabel = document.getElementById('rhythmLabel');
 const statusEl = document.getElementById('status');
 const tuningMeta = document.getElementById('tuningMeta');
+const barsContainer = document.getElementById('barsContainer');
 const player = document.getElementById('player');
 
-let tunings = { edos: [], scala: [] };
-let selectedChord = null;
+const state = {
+  tunings: [],
+  baseFrequency: 440,
+  chordsByTuning: {},
+  selectedTuningId: null,
+  selectedChordId: null,
+  selectedRoot: 0,
+  bars: [],
+  mode: 'harmony',
+  bpm: 120,
+  rhythmSpeed: 0.01,
+};
+
+function updateStatus(text) {
+  statusEl.textContent = text;
+}
+
+function getTuning(tuningId) {
+  return state.tunings.find((t) => t.id === tuningId);
+}
+
+function getChord(tuningId, chordId) {
+  const cache = state.chordsByTuning[tuningId];
+  if (!cache) return null;
+  return cache.chords.find((chord) => chord.id === chordId);
+}
 
 async function fetchTunings() {
   const res = await fetch('/api/tunings');
   const data = await res.json();
-  tunings = data;
-  tuningMeta.textContent = `Base frequency: ${data.baseFrequency} Hz`;
-  populateScalaSelect(data.scala || []);
-  loadChords();
+  state.tunings = data.tunings || [];
+  state.baseFrequency = data.baseFrequency || 440;
+  state.selectedTuningId = state.tunings[0]?.id || null;
+  tuningMeta.textContent = `Base frequency ${state.baseFrequency} Hz`;
+  if (state.selectedTuningId) {
+    await ensureChords(state.selectedTuningId);
+    seedSelections();
+    renderTunings();
+    renderRoots();
+    renderChords();
+    renderBars();
+  }
 }
 
-function populateScalaSelect(scala) {
-  scalaSelect.innerHTML = '';
-  scala.forEach((scale) => {
-    const option = document.createElement('option');
-    option.value = scale.name;
-    option.textContent = `${scale.name} (${scale.count})`;
-    scalaSelect.appendChild(option);
-  });
-}
-
-async function loadChords() {
-  const tuningType = tuningTypeSelect.value;
-  const tuningValue = tuningType === 'edo' ? edoStepsInput.value : scalaSelect.value;
-  const query = new URLSearchParams({ tuningType, tuningValue });
-  const res = await fetch(`/api/chords?${query.toString()}`);
+async function ensureChords(tuningId) {
+  if (state.chordsByTuning[tuningId]) return;
+  const res = await fetch(`/api/chords?tuningId=${encodeURIComponent(tuningId)}`);
   const data = await res.json();
-  renderChords(data.chords || []);
+  state.chordsByTuning[tuningId] = { chords: data.chords || [], roots: data.roots || [] };
 }
 
-function renderChords(chords) {
+function seedSelections() {
+  const cache = state.chordsByTuning[state.selectedTuningId];
+  state.selectedRoot = cache?.roots[0]?.value || 0;
+  state.selectedChordId = cache?.chords[0]?.id || null;
+  state.bars = Array.from({ length: 4 }, (_, index) => ({
+    bar: index,
+    tuningId: state.selectedTuningId,
+    root: state.selectedRoot,
+    chordId: state.selectedChordId,
+  }));
+}
+
+function renderTunings() {
+  tuningSelect.innerHTML = '';
+  state.tunings.forEach((tuning) => {
+    const option = document.createElement('option');
+    option.value = tuning.id;
+    option.textContent = tuning.label;
+    tuningSelect.appendChild(option);
+  });
+  tuningSelect.value = state.selectedTuningId;
+}
+
+function renderRoots() {
+  const cache = state.chordsByTuning[state.selectedTuningId];
+  const roots = cache?.roots || [];
+  rootSelect.innerHTML = '';
+  roots.forEach((root) => {
+    const option = document.createElement('option');
+    option.value = root.value;
+    option.textContent = root.label;
+    rootSelect.appendChild(option);
+  });
+  if (!roots.find((r) => r.value === state.selectedRoot) && roots.length) {
+    state.selectedRoot = roots[0].value;
+  }
+  rootSelect.value = state.selectedRoot;
+}
+
+function renderChords() {
+  const cache = state.chordsByTuning[state.selectedTuningId];
+  const chords = cache?.chords || [];
   chordList.innerHTML = '';
-  selectedChord = null;
   chords.forEach((chord) => {
     const item = document.createElement('div');
     item.className = 'chord-item';
-    item.textContent = `${chord.name} — degrees ${chord.degrees.join(', ')}`;
+    item.textContent = `${chord.label || chord.name} — degrees ${chord.degrees.join(', ')}`;
     item.onclick = () => {
-      selectedChord = chord;
+      state.selectedChordId = chord.id;
       document.querySelectorAll('.chord-item').forEach((el) => el.classList.remove('active'));
       item.classList.add('active');
-      statusEl.textContent = `Selected ${chord.name}`;
+      updateStatus(`Selected ${chord.label || chord.name}`);
     };
     chordList.appendChild(item);
   });
-  if (chords.length && !selectedChord) {
-    chordList.firstChild.click();
+  if (chords.length && !state.selectedChordId) {
+    state.selectedChordId = chords[0].id;
+  }
+  const active = chordList.querySelector(
+    `.chord-item:nth-child(${chords.findIndex((c) => c.id === state.selectedChordId) + 1 || 1})`
+  );
+  if (active) active.classList.add('active');
+}
+
+function renderBars() {
+  barsContainer.innerHTML = '';
+  state.bars.forEach((bar) => {
+    const card = document.createElement('div');
+    card.className = 'bar-card';
+    const title = document.createElement('h3');
+    title.textContent = `Bar ${bar.bar + 1}`;
+    card.appendChild(title);
+
+    const tuningLabel = document.createElement('label');
+    tuningLabel.textContent = 'Tuning';
+    const tuningSelectEl = document.createElement('select');
+    state.tunings.forEach((tuning) => {
+      const option = document.createElement('option');
+      option.value = tuning.id;
+      option.textContent = tuning.label;
+      tuningSelectEl.appendChild(option);
+    });
+    tuningSelectEl.value = bar.tuningId;
+    tuningSelectEl.onchange = async (e) => {
+      await ensureChords(e.target.value);
+      const cache = state.chordsByTuning[e.target.value];
+      state.bars[bar.bar] = {
+        ...bar,
+        tuningId: e.target.value,
+        root: cache.roots[0]?.value || 0,
+        chordId: cache.chords[0]?.id || null,
+      };
+      renderBars();
+    };
+    tuningLabel.appendChild(tuningSelectEl);
+    card.appendChild(tuningLabel);
+
+    const rootLabel = document.createElement('label');
+    rootLabel.textContent = 'Root';
+    const rootSelectEl = document.createElement('select');
+    const rootOptions = state.chordsByTuning[bar.tuningId]?.roots || [];
+    rootOptions.forEach((root) => {
+      const option = document.createElement('option');
+      option.value = root.value;
+      option.textContent = root.label;
+      rootSelectEl.appendChild(option);
+    });
+    rootSelectEl.value = bar.root;
+    rootSelectEl.onchange = (e) => {
+      const current = state.bars[bar.bar];
+      state.bars[bar.bar] = { ...current, root: Number(e.target.value) };
+    };
+    rootLabel.appendChild(rootSelectEl);
+    card.appendChild(rootLabel);
+
+    const chordLabel = document.createElement('label');
+    chordLabel.textContent = 'Chord';
+    const chordSelectEl = document.createElement('select');
+    const chordOptions = state.chordsByTuning[bar.tuningId]?.chords || [];
+    chordOptions.forEach((chord) => {
+      const option = document.createElement('option');
+      option.value = chord.id;
+      option.textContent = chord.label || chord.name;
+      chordSelectEl.appendChild(option);
+    });
+    chordSelectEl.value = bar.chordId;
+    chordSelectEl.onchange = (e) => {
+      const current = state.bars[bar.bar];
+      state.bars[bar.bar] = { ...current, chordId: e.target.value };
+    };
+    chordLabel.appendChild(chordSelectEl);
+    card.appendChild(chordLabel);
+
+    barsContainer.appendChild(card);
+  });
+}
+
+function degreeToFrequency(tuningId, degree) {
+  const tuning = getTuning(tuningId);
+  if (!tuning) return state.baseFrequency;
+  if (tuning.type === 'edo') {
+    return state.baseFrequency * 2 ** (degree / tuning.value);
+  }
+  const intervals = tuning.intervals || [];
+  const index = degree % intervals.length;
+  const octaves = Math.floor(degree / intervals.length);
+  const cents = intervals[index] || 0;
+  return state.baseFrequency * 2 ** octaves * 2 ** (cents / 1200);
+}
+
+function frequenciesForEvent(event) {
+  const chord = getChord(event.tuningId, event.chordId);
+  if (!chord) return [];
+  return chord.degrees.map((degree) => degreeToFrequency(event.tuningId, degree + Number(event.root || 0)));
+}
+
+function createClickOsc(ctx, startTime, duration, amplitude) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.frequency.value = 160;
+  gain.gain.setValueAtTime(amplitude, startTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+function scheduleHarmony(ctx, startTime, duration, freqs) {
+  const amp = 0.4 / Math.max(freqs.length, 1);
+  freqs.forEach((freq) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(amp, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  });
+}
+
+function scheduleRhythm(ctx, startTime, duration, freqs) {
+  const amp = 0.25;
+  freqs.forEach((freq, index) => {
+    const rate = Math.max(0.5, freq * state.rhythmSpeed);
+    const interval = 1 / rate;
+    for (let t = 0; t < duration; t += interval) {
+      createClickOsc(ctx, startTime + t, 0.08, amp / (index + 1));
+    }
+  });
+}
+
+function playChordPreview(event) {
+  const ctx = new AudioContext();
+  const start = ctx.currentTime + 0.05;
+  const duration = (60 / state.bpm) * 4;
+  const freqs = frequenciesForEvent(event);
+  if (!freqs.length) return;
+  if (state.mode === 'rhythm') {
+    scheduleRhythm(ctx, start, duration, freqs);
+  } else {
+    scheduleHarmony(ctx, start, duration, freqs);
   }
 }
 
-async function play() {
-  if (!selectedChord) {
-    statusEl.textContent = 'Pick a chord first.';
+function playSequencePreview(events) {
+  const ctx = new AudioContext();
+  const beatsPerBar = 4;
+  const secondsPerBeat = 60 / state.bpm;
+  const barDuration = beatsPerBar * secondsPerBeat;
+  const start = ctx.currentTime + 0.05;
+  events.forEach((event) => {
+    const freqs = frequenciesForEvent(event);
+    const eventStart = start + barDuration * event.bar;
+    if (state.mode === 'rhythm') {
+      scheduleRhythm(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
+    } else {
+      scheduleHarmony(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
+    }
+  });
+}
+
+function buildChordPayload() {
+  const chord = getChord(state.selectedTuningId, state.selectedChordId);
+  if (!chord) return null;
+  return {
+    tuningId: state.selectedTuningId,
+    chord,
+    root: Number(state.selectedRoot || 0),
+    mode: state.mode,
+    bpm: state.bpm,
+    rhythmSpeed: state.rhythmSpeed,
+  };
+}
+
+function buildLoopPayload() {
+  const sequence = state.bars.map((bar) => ({
+    bar: bar.bar,
+    durationBars: 1,
+    tuningId: bar.tuningId,
+    chord: getChord(bar.tuningId, bar.chordId),
+    chordId: bar.chordId,
+    root: Number(bar.root || 0),
+  })).filter((item) => item.chord);
+  return {
+    mode: state.mode,
+    bpm: state.bpm,
+    rhythmSpeed: state.rhythmSpeed,
+    sequence,
+  };
+}
+
+async function playChord() {
+  const payload = buildChordPayload();
+  if (!payload) {
+    updateStatus('Pick a chord first.');
     return;
   }
-  const payload = buildPayload();
-  statusEl.textContent = 'Scheduling playback…';
+  updateStatus('Scheduling chord…');
   await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  statusEl.textContent = 'Playback scheduled via backend. Playing locally for preview…';
-  playInBrowser(payload);
+  playChordPreview({ tuningId: payload.tuningId, chordId: payload.chord.id, root: payload.root, bar: 0, durationBars: 1 });
+  updateStatus('Chord scheduled. Preview playing locally.');
 }
 
-async function renderExport() {
-  if (!selectedChord) {
-    statusEl.textContent = 'Pick a chord first.';
+async function renderChord() {
+  const payload = buildChordPayload();
+  if (!payload) {
+    updateStatus('Pick a chord first.');
     return;
   }
-  const payload = buildPayload();
-  statusEl.textContent = 'Rendering…';
+  updateStatus('Rendering chord…');
   const res = await fetch('/api/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json();
   if (data.file) {
     player.classList.remove('hidden');
     player.src = data.file;
     player.load();
-    statusEl.textContent = 'Rendered! Use the player controls to download or audition.';
+    updateStatus('Rendered chord.');
   } else {
-    statusEl.textContent = 'Render failed.';
+    updateStatus('Render failed.');
   }
 }
 
-function buildPayload() {
-  return {
-    tuningType: tuningTypeSelect.value,
-    tuningValue: tuningTypeSelect.value === 'edo' ? parseInt(edoStepsInput.value, 10) : scalaSelect.value,
-    chord: selectedChord,
-    mode: modeSelect.value,
-    duration: parseFloat(durationInput.value),
-    mappingFactor: parseFloat(mappingFactorInput.value),
+async function playLoop() {
+  const payload = buildLoopPayload();
+  if (!payload.sequence.length) {
+    updateStatus('Add at least one chord to the loop.');
+    return;
+  }
+  updateStatus('Scheduling loop…');
+  await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  playSequencePreview(payload.sequence);
+  updateStatus('Loop scheduled. Preview playing locally.');
+}
+
+async function renderLoop() {
+  const payload = buildLoopPayload();
+  if (!payload.sequence.length) {
+    updateStatus('Add at least one chord to the loop.');
+    return;
+  }
+  updateStatus('Rendering loop…');
+  const res = await fetch('/api/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (data.file) {
+    player.classList.remove('hidden');
+    player.src = data.file;
+    player.load();
+    updateStatus('Rendered loop.');
+  } else {
+    updateStatus('Render failed.');
+  }
+}
+
+function hookEvents() {
+  tuningSelect.onchange = async (e) => {
+    state.selectedTuningId = e.target.value;
+    await ensureChords(state.selectedTuningId);
+    renderRoots();
+    renderChords();
   };
-}
 
-function playInBrowser(payload) {
-  const ctx = new AudioContext();
-  const now = ctx.currentTime;
-  const voices = payload.chord.degrees.length;
-  const amp = 0.4 / voices;
-  payload.chord.degrees.forEach((degree, index) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const freq = degreeToFrequency(payload, degree);
-    osc.frequency.value = freq;
-    if (payload.mode === 'rhythm') {
-      const rate = Math.max(0.5, freq * payload.mappingFactor);
-      const interval = 1 / rate;
-      for (let t = 0; t < payload.duration; t += interval) {
-        const clickGain = ctx.createGain();
-        clickGain.gain.setValueAtTime(amp / (index + 1), now + t);
-        clickGain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.1);
-        const clickOsc = ctx.createOscillator();
-        clickOsc.frequency.value = 120 + index * 10;
-        clickOsc.connect(clickGain).connect(ctx.destination);
-        clickOsc.start(now + t);
-        clickOsc.stop(now + t + 0.1);
-      }
-    } else {
-      osc.type = 'sine';
-      osc.start(now);
-      osc.stop(now + payload.duration);
-      gain.gain.setValueAtTime(amp, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + payload.duration);
-      osc.connect(gain).connect(ctx.destination);
-    }
-  });
-}
+  rootSelect.onchange = (e) => {
+    state.selectedRoot = Number(e.target.value);
+  };
 
-function degreeToFrequency(payload, degree) {
-  if (payload.tuningType === 'edo') {
-    return tunings.baseFrequency * 2 ** (degree / payload.tuningValue);
-  }
-  const scale = tunings.scala.find((s) => s.name === payload.tuningValue);
-  if (!scale) return tunings.baseFrequency;
-  const index = degree % scale.count;
-  const octaves = Math.floor(degree / scale.count);
-  const cents = scale.intervals ? scale.intervals[index] : 1200 * (index / scale.count);
-  return tunings.baseFrequency * 2 ** octaves * 2 ** (cents / 1200);
-}
+  modeSelect.onchange = (e) => {
+    state.mode = e.target.value;
+  };
 
-function toggleTuningInputs() {
-  const useEdo = tuningTypeSelect.value === 'edo';
-  edoLabel.classList.toggle('hidden', !useEdo);
-  scalaLabel.classList.toggle('hidden', useEdo);
-  loadChords();
+  bpmInput.oninput = (e) => {
+    state.bpm = Number(e.target.value);
+    bpmLabel.textContent = `${state.bpm} BPM`;
+  };
+
+  rhythmSpeedInput.oninput = (e) => {
+    state.rhythmSpeed = Number(e.target.value);
+    rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(3)}× pitch → beat`;
+  };
+
+  document.getElementById('playChordBtn').onclick = playChord;
+  document.getElementById('renderChordBtn').onclick = renderChord;
+  document.getElementById('playLoopBtn').onclick = playLoop;
+  document.getElementById('renderLoopBtn').onclick = renderLoop;
 }
 
 function init() {
+  hookEvents();
   fetchTunings();
-  tuningTypeSelect.onchange = toggleTuningInputs;
-  edoStepsInput.onchange = loadChords;
-  scalaSelect.onchange = loadChords;
-  document.getElementById('playBtn').onclick = play;
-  document.getElementById('renderBtn').onclick = renderExport;
+  updateStatus('Loading tunings…');
 }
 
 window.addEventListener('DOMContentLoaded', init);
