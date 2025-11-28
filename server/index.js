@@ -4,7 +4,7 @@ const fs = require('fs');
 const url = require('url');
 const config = require('./config');
 const { listTunings, chordsForTuning, chordFrequencies } = require('./tuning/tuningService');
-const { renderToFile, playRealtime } = require('./audio/engine');
+const { renderToFile, playRealtime } = require('./audio');
 
 const publicDir = path.join(process.cwd(), 'public');
 
@@ -92,7 +92,7 @@ async function handlePlay(req, res) {
       chord,
       baseFrequency: config.baseFrequency,
     });
-    const playResult = playRealtime({ tuningType, tuningValue, chord, mode, duration, mappingFactor, frequencies });
+    const playResult = await playRealtime({ tuningType, tuningValue, chord, mode, duration, mappingFactor, frequencies });
     sendJson(res, 200, { status: 'ok', playResult });
   } catch (error) {
     sendJson(res, 500, { error: error.message });
@@ -104,7 +104,7 @@ async function handleRender(req, res) {
     const body = await parseBody(req);
     const { tuningType, tuningValue, chord, mode, duration = 4, mappingFactor = 0.01 } = body;
     const frequencies = chordFrequencies({ tuningType, tuningValue, chord, baseFrequency: config.baseFrequency });
-    const renderResult = renderToFile({ mode, frequencies, duration, mappingFactor });
+    const renderResult = await renderToFile({ mode, frequencies, duration, mappingFactor });
     const relativeUrl = `/renders/${renderResult.filename}`;
     sendJson(res, 200, { status: 'ok', file: relativeUrl });
   } catch (error) {

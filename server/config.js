@@ -33,10 +33,8 @@ const config = {
   baseFrequency: parseFloat(process.env.BASE_FREQUENCY) || 440,
   renderOutputDir: process.env.RENDER_OUTPUT_DIR || path.join(process.cwd(), 'renders'),
   scalesDir: process.env.SCALES_DIR || path.join(process.cwd(), 'scales'),
-  superColliderHost: process.env.SUPER_COLLIDER_HOST || '127.0.0.1',
-  superColliderPort: parseInt(process.env.SUPER_COLLIDER_PORT, 10) || 57110,
+  superColliderEnabled: (process.env.SUPER_COLLIDER_ENABLED || '').toLowerCase() === 'true',
   superColliderSclangPath: process.env.SUPER_COLLIDER_SCLANG_PATH || 'sclang',
-  apiBaseUrl: process.env.API_BASE_URL || '',
   renderSampleRate: parseInt(process.env.RENDER_SAMPLE_RATE, 10) || 44100,
 };
 
