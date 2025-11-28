@@ -86,7 +86,7 @@ function handleChords(req, res, query) {
 async function handlePlay(req, res) {
   try {
     const body = await parseBody(req);
-    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120 } = body;
+    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings } = body;
 
     if (Array.isArray(body.sequence) && body.sequence.length) {
       const events = body.sequence.map((event, index) => {
@@ -107,7 +107,7 @@ async function handlePlay(req, res) {
           frequencies,
         };
       });
-      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events });
+      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events, synthSettings });
       sendJson(res, 200, { status: 'ok', playResult });
       return;
     }
@@ -120,7 +120,17 @@ async function handlePlay(req, res) {
       baseFrequency: config.baseFrequency,
     });
     const duration = body.duration || 4;
-    const playResult = await playRealtime({ ...parsed, chord: body.chord, root: body.root || 0, mode, duration, rhythmSpeed, bpm, frequencies });
+    const playResult = await playRealtime({
+      ...parsed,
+      chord: body.chord,
+      root: body.root || 0,
+      mode,
+      duration,
+      rhythmSpeed,
+      bpm,
+      frequencies,
+      synthSettings,
+    });
     sendJson(res, 200, { status: 'ok', playResult });
   } catch (error) {
     sendJson(res, 500, { error: error.message });
@@ -130,7 +140,7 @@ async function handlePlay(req, res) {
 async function handleRender(req, res) {
   try {
     const body = await parseBody(req);
-    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120 } = body;
+    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings } = body;
 
     if (Array.isArray(body.sequence) && body.sequence.length) {
       const events = body.sequence.map((event, index) => {
@@ -151,7 +161,7 @@ async function handleRender(req, res) {
           frequencies,
         };
       });
-      const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events });
+      const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events, synthSettings });
       const relativeUrl = `/renders/${renderResult.filename}`;
       sendJson(res, 200, { status: 'ok', file: relativeUrl });
       return;
@@ -160,7 +170,7 @@ async function handleRender(req, res) {
     const parsed = parseTuningId(body.tuningId, body.tuningType, body.tuningValue);
     const frequencies = chordFrequencies({ ...parsed, chord: body.chord, root: body.root || 0, baseFrequency: config.baseFrequency });
     const duration = body.duration || 4;
-    const renderResult = await renderToFile({ mode, frequencies, duration, rhythmSpeed, bpm });
+    const renderResult = await renderToFile({ mode, frequencies, duration, rhythmSpeed, bpm, synthSettings });
     const relativeUrl = `/renders/${renderResult.filename}`;
     sendJson(res, 200, { status: 'ok', file: relativeUrl });
   } catch (error) {
