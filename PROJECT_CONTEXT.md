@@ -2,6 +2,7 @@
 
 ## Overview
 SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The backend can talk to SuperCollider for real audio playback/rendering or fall back to a built-in Node DSP stub when SuperCollider is unavailable. Users browse tunings, pick roots and chords, sequence a simple 4-bar loop, audition it, and export WAV renders from the browser.
+Rhythm-mode renders now use bright, percussive noise bursts (with an optional low thump on the first voice) that mirror the browser preview and are designed to register clearly with Ableton Live’s “Convert Drums to MIDI.” Offline renders are normalized so their loudness aligns with the live preview.
 
 ## Architecture
 - **Frontend** (`public/`)
@@ -22,7 +23,7 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 - **Audio engines** (`server/audio/`)
   - `supercolliderClient.js` — writes small SuperCollider scripts and executes them via `sclang`. Provides `playRealtime` and `renderToFile` using simple SynthDefs for harmony and rhythm mapping.
-  - `engine.js` — Node DSP fallback that synthesizes sine/click textures and encodes mono 16-bit PCM WAV files. It now supports single-chord renders and multi-event 4-bar sequences, respecting BPM and rhythm-speed mapping.
+  - `engine.js` — Node DSP fallback that synthesizes sine/percussive textures and encodes mono 16-bit PCM WAV files. It now supports single-chord renders and multi-event 4-bar sequences, respecting BPM and rhythm-speed mapping.
   - `index.js` — router that selects SuperCollider when `SUPER_COLLIDER_ENABLED=true`; otherwise uses the Node fallback. If SuperCollider execution fails, it automatically falls back to the Node path.
 
 ## Audio behavior
@@ -32,7 +33,8 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 - **SuperCollider disabled (default)**
   - `/api/play` logs the playback job (no audio output) using the Node stub.
-  - `/api/render` renders sine (harmony) or click-based (rhythm) WAV files via the Node DSP, writing them under `RENDER_OUTPUT_DIR`.
+  - `/api/render` renders sine (harmony) or noise-based percussive (rhythm) WAV files via the Node DSP, writing them under `RENDER_OUTPUT_DIR`. Rhythm mode uses a sharp noise burst (optionally with a low sine thump on the first voice), fast attack (~0.5 ms), and short decay (25–80 ms) with a bright high-pass tilt for Ableton-friendly transients. Harmony mode decays exponentially to near silence over the note duration.
+  - The Node renders normalize output around -4 dBFS so preview loudness and rendered WAVs align; the browser preview shares the same voice design for “what you hear is what you get.”
 
 ## API request shapes
 - `GET /api/tunings`
