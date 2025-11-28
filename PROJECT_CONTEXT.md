@@ -1,56 +1,58 @@
 # SynBrane project context
 
 ## Overview
-SynBrane is an experimental music tool that pairs a lightweight browser UI with a Node.js backend and a SuperCollider-friendly audio engine boundary. The current build focuses on:
-
-- Selecting tunings (EDO or Scala) and browsing chords derived from those tunings.
-- Auditioning chords either as pitched harmony or as rhythm patterns mapped from pitch data.
-- Rendering audio to WAV files that can be downloaded from the browser.
-
-The backend currently performs simple synthesized rendering in Node.js as a stand-in for a full SuperCollider bridge. The structure is intentionally modular so OSC/NRT integration can replace the stub easily.
+SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The backend can either talk to SuperCollider for real audio playback/rendering or fall back to a built-in Node DSP stub when SuperCollider is unavailable. Users browse tunings and chords, audition them, and export WAV renders from the browser.
 
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served by the backend.
   - Fetches tuning lists and chord suggestions from the API.
   - Lets users choose mode (harmony vs rhythm), duration, and a pitch→rate mapping factor.
-  - Calls `/api/play` for audition and `/api/render` for offline rendering. Browser-side Web Audio provides immediate preview, while the backend render produces downloadable WAVs.
+  - Calls `/api/play` for audition and `/api/render` for offline rendering. The UI shape stays unchanged regardless of the audio backend.
 
 - **Backend** (`server/`)
-  - Minimal HTTP server (no external deps) exposing REST endpoints:
-    - `GET /api/tunings` — returns available EDO counts and Scala scales discovered from `SCALES_DIR`.
+  - Minimal HTTP server exposing REST endpoints:
+    - `GET /api/tunings` — returns available EDO counts and Scala scales discovered from `SCALES_DIR` plus the base frequency and default duration.
     - `GET /api/chords?tuningType=...&tuningValue=...` — generates chord options for the selected tuning.
-    - `POST /api/play` — logs/schedules a playback job (placeholder for SuperCollider real-time playback).
+    - `POST /api/play` — triggers playback through the active audio engine.
     - `POST /api/render` — renders harmony or rhythm audio to a WAV file and returns the file URL.
   - Serves static assets from `public/` and rendered files from `RENDER_OUTPUT_DIR`.
-  - Tuning helpers live in `server/tuning/`, while rendering helpers live in `server/audio/`.
+  - Tuning helpers live in `server/tuning/`.
 
-- **Audio engine placeholder** (`server/audio/engine.js`)
-  - Generates simple sine-based harmony or click-based rhythm textures directly in Node.js.
-  - Encodes mono 16-bit PCM WAV files and stores them under `RENDER_OUTPUT_DIR`.
-  - `playRealtime` currently logs jobs; it is the seam where OSC messages to SuperCollider would be dispatched.
+- **Audio engines** (`server/audio/`)
+  - `supercolliderClient.js` — writes small SuperCollider scripts and executes them via `sclang`. Provides `playRealtime` (fire-and-forget real-time play) and `renderToFile` (offline Score rendering to WAV) using simple SynthDefs for harmony and rhythm mapping.
+  - `engine.js` — Node DSP fallback that synthesizes sine/click textures and encodes mono 16-bit PCM WAV files.
+  - `index.js` — router that selects SuperCollider when `SUPER_COLLIDER_ENABLED=true`; otherwise uses the Node fallback. If SuperCollider execution fails, it automatically falls back to the Node path.
 
-## Data flow
-1. **Choose tuning/chord** — The UI fetches `/api/tunings`, selects an EDO or Scala scale, and then fetches `/api/chords` to display generated chord options. Selection updates a preview state.
-2. **Hear it** — Pressing **Play** calls `/api/play` (for backend scheduling) and simultaneously triggers Web Audio preview so users can hear immediately.
-3. **Export** — Pressing **Render & Export** posts to `/api/render`, which returns a WAV URL (served from `renders/`). The in-page audio element loads that file for audition and download.
+## Audio behavior
+- **SuperCollider enabled**
+  - `/api/play` launches a temporary `sclang` script that boots scsynth, loads the SynthDefs, starts the requested chord in harmony or rhythm mode, waits for the requested duration, then quits.
+  - `/api/render` builds a short NRT Score with the same SynthDefs and renders directly to the target WAV under `RENDER_OUTPUT_DIR` using `recordNRT`.
+
+- **SuperCollider disabled (default)**
+  - `/api/play` logs the playback job (no audio output) using the Node stub.
+  - `/api/render` renders a sine/click WAV file via the Node DSP and writes it under `RENDER_OUTPUT_DIR`.
 
 ## Environment variables
-Located in `.env.example`:
-- `PORT` / `HOST` — HTTP server bind values.
-- `BASE_FREQUENCY` — Base pitch for tuning calculations (Hz).
-- `SCALES_DIR` — Directory containing Scala `.scl` files.
-- `RENDER_OUTPUT_DIR` — Where rendered WAV files are written and served from.
-- `API_BASE_URL` — Optional override when reverse proxying the API.
-- `SUPER_COLLIDER_HOST` / `SUPER_COLLIDER_PORT` / `SUPER_COLLIDER_SCLANG_PATH` — Connection details for a future SuperCollider bridge.
-- `RENDER_SAMPLE_RATE` — Sample rate for offline renders (Hz).
+Only variables that the running code consumes are listed here.
+
+| Name | Required? | Purpose | Default if missing |
+| --- | --- | --- | --- |
+| `PORT` | Optional | HTTP server port | `3000` |
+| `HOST` | Optional | HTTP server host | `0.0.0.0` |
+| `BASE_FREQUENCY` | Optional | Base pitch (Hz) for tuning calculations | `440` |
+| `SCALES_DIR` | Optional | Directory containing Scala `.scl` files | `<repo>/scales` |
+| `RENDER_OUTPUT_DIR` | Optional | Directory where rendered WAV files are written and served | `<repo>/renders` |
+| `RENDER_SAMPLE_RATE` | Optional | Sample rate (Hz) for offline renders | `44100` |
+| `SUPER_COLLIDER_ENABLED` | Optional | When `true`, use SuperCollider for play/render; otherwise use the Node DSP fallback | `false` |
+| `SUPER_COLLIDER_SCLANG_PATH` | Optional | Path to the `sclang` executable used for SuperCollider scripts | `sclang` |
 
 ## Scripts
 - `npm run dev` — Start the backend in development mode.
 - `npm start` — Start the backend with default environment.
 
 ## TODOs and extension points
-- Replace `playRealtime` with actual OSC/NRT communication to SuperCollider (using `scsynth`/`sclang` or `supercolliderjs`).
+- Improve error reporting/health checks for the SuperCollider pathway.
 - Expand chord-generation strategies and expose more interval-pattern presets.
 - Add more Scala scales to `scales/` and surface descriptions in the UI.
 - Provide richer UI feedback (waveform display, visual rhythm preview, progress indicators during render).

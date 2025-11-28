@@ -4,7 +4,7 @@ Experimental music workbench for exploring alternative tunings, browsing chords,
 
 ## Getting started
 1. Copy `.env.example` to `.env` and adjust as needed.
-2. Install dependencies (none required beyond Node.js for the current stubbed build).
+2. Install dependencies (none required beyond Node.js; SuperCollider is optional when `SUPER_COLLIDER_ENABLED=true`).
 3. Run the server:
    ```bash
    npm run dev
