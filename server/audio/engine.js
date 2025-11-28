@@ -12,7 +12,7 @@ function mapFrequenciesToRhythm(frequencies, mappingFactor) {
   return frequencies.map((freq) => Math.max(0.5, freq * mappingFactor));
 }
 
-function generateSamples({ mode, frequencies, duration, sampleRate, mappingFactor }) {
+function generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor }) {
   const totalSamples = Math.floor(sampleRate * duration);
   const samples = new Float32Array(totalSamples);
   if (mode === 'harmony') {
@@ -42,6 +42,30 @@ function generateSamples({ mode, frequencies, duration, sampleRate, mappingFacto
   return samples;
 }
 
+function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor }) {
+  const beatsPerBar = 4;
+  const secondsPerBeat = 60 / bpm;
+  const barDuration = secondsPerBeat * beatsPerBar;
+  const totalBars = Math.max(...events.map((event) => (event.bar || 0) + (event.durationBars || 1)), 1);
+  const totalDuration = totalBars * barDuration;
+  const totalSamples = Math.ceil(sampleRate * totalDuration);
+  const samples = new Float32Array(totalSamples);
+
+  events.forEach((event) => {
+    const startTime = barDuration * (event.bar || 0);
+    const duration = barDuration * (event.durationBars || 1);
+    const startSample = Math.floor(startTime * sampleRate);
+    const endSample = Math.min(totalSamples, Math.floor((startTime + duration) * sampleRate));
+    const localSamples = endSample - startSample;
+    const buffer = generateChordSamples({ mode, frequencies: event.frequencies, duration, sampleRate, mappingFactor });
+    for (let i = 0; i < localSamples; i += 1) {
+      samples[startSample + i] += buffer[i];
+    }
+  });
+
+  return samples;
+}
+
 function encodeWav(samples, sampleRate) {
   const byteRate = sampleRate * 2;
   const blockAlign = 2;
@@ -67,10 +91,16 @@ function encodeWav(samples, sampleRate) {
   return buffer;
 }
 
-function renderToFile({ mode, frequencies, duration, mappingFactor }) {
+function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed, events, bpm }) {
   ensureDir(config.renderOutputDir);
   const sampleRate = config.renderSampleRate;
-  const samples = generateSamples({ mode, frequencies, duration, sampleRate, mappingFactor });
+  const effectiveMapping = rhythmSpeed ?? mappingFactor;
+  let samples;
+  if (Array.isArray(events) && events.length) {
+    samples = generateSequenceSamples({ mode, events, bpm: bpm || 120, sampleRate, mappingFactor: effectiveMapping });
+  } else {
+    samples = generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor: effectiveMapping });
+  }
   const wav = encodeWav(samples, sampleRate);
   const filename = `render-${mode}-${Date.now()}.wav`;
   const filePath = path.join(config.renderOutputDir, filename);

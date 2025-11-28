@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const url = require('url');
 const config = require('./config');
-const { listTunings, chordsForTuning, chordFrequencies } = require('./tuning/tuningService');
+const { listTunings, chordsForTuning, chordFrequencies, parseTuningId } = require('./tuning/tuningService');
 const { renderToFile, playRealtime } = require('./audio');
 
 const publicDir = path.join(process.cwd(), 'public');
@@ -76,23 +76,51 @@ function handleTunings(req, res) {
 }
 
 function handleChords(req, res, query) {
+  const tuningId = query.tuningId;
   const tuningType = query.tuningType || 'edo';
   const tuningValue = tuningType === 'edo' ? parseInt(query.tuningValue || '12', 10) : query.tuningValue;
-  const chords = chordsForTuning({ tuningType, tuningValue });
-  sendJson(res, 200, { chords });
+  const { chords, roots } = chordsForTuning({ tuningId, tuningType, tuningValue });
+  sendJson(res, 200, { chords, roots });
 }
 
 async function handlePlay(req, res) {
   try {
     const body = await parseBody(req);
-    const { tuningType, tuningValue, chord, mode, duration = 4, mappingFactor = 0.01 } = body;
+    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120 } = body;
+
+    if (Array.isArray(body.sequence) && body.sequence.length) {
+      const events = body.sequence.map((event, index) => {
+        const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
+        const frequencies = chordFrequencies({
+          ...parsed,
+          chord: event.chord,
+          root: event.root || 0,
+          baseFrequency: config.baseFrequency,
+        });
+        return {
+          ...parsed,
+          tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
+          chord: event.chord,
+          root: event.root || 0,
+          bar: event.bar ?? index,
+          durationBars: event.durationBars || 1,
+          frequencies,
+        };
+      });
+      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events });
+      sendJson(res, 200, { status: 'ok', playResult });
+      return;
+    }
+
+    const parsed = parseTuningId(body.tuningId, body.tuningType, body.tuningValue);
     const frequencies = chordFrequencies({
-      tuningType,
-      tuningValue,
-      chord,
+      ...parsed,
+      chord: body.chord,
+      root: body.root || 0,
       baseFrequency: config.baseFrequency,
     });
-    const playResult = await playRealtime({ tuningType, tuningValue, chord, mode, duration, mappingFactor, frequencies });
+    const duration = body.duration || 4;
+    const playResult = await playRealtime({ ...parsed, chord: body.chord, root: body.root || 0, mode, duration, rhythmSpeed, bpm, frequencies });
     sendJson(res, 200, { status: 'ok', playResult });
   } catch (error) {
     sendJson(res, 500, { error: error.message });
@@ -102,9 +130,37 @@ async function handlePlay(req, res) {
 async function handleRender(req, res) {
   try {
     const body = await parseBody(req);
-    const { tuningType, tuningValue, chord, mode, duration = 4, mappingFactor = 0.01 } = body;
-    const frequencies = chordFrequencies({ tuningType, tuningValue, chord, baseFrequency: config.baseFrequency });
-    const renderResult = await renderToFile({ mode, frequencies, duration, mappingFactor });
+    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120 } = body;
+
+    if (Array.isArray(body.sequence) && body.sequence.length) {
+      const events = body.sequence.map((event, index) => {
+        const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
+        const frequencies = chordFrequencies({
+          ...parsed,
+          chord: event.chord,
+          root: event.root || 0,
+          baseFrequency: config.baseFrequency,
+        });
+        return {
+          ...parsed,
+          tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
+          chord: event.chord,
+          root: event.root || 0,
+          bar: event.bar ?? index,
+          durationBars: event.durationBars || 1,
+          frequencies,
+        };
+      });
+      const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events });
+      const relativeUrl = `/renders/${renderResult.filename}`;
+      sendJson(res, 200, { status: 'ok', file: relativeUrl });
+      return;
+    }
+
+    const parsed = parseTuningId(body.tuningId, body.tuningType, body.tuningValue);
+    const frequencies = chordFrequencies({ ...parsed, chord: body.chord, root: body.root || 0, baseFrequency: config.baseFrequency });
+    const duration = body.duration || 4;
+    const renderResult = await renderToFile({ mode, frequencies, duration, rhythmSpeed, bpm });
     const relativeUrl = `/renders/${renderResult.filename}`;
     sendJson(res, 200, { status: 'ok', file: relativeUrl });
   } catch (error) {
