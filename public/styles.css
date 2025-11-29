@@ -39,9 +39,6 @@ h1 {
 }
 
 .about-trigger {
-  position: absolute;
-  top: 2px;
-  right: 0;
   padding: 6px 10px;
   background: #131822;
   color: var(--subtle);
@@ -55,6 +52,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-top: 10px;
 }
 
 .about-trigger:hover,
