@@ -344,48 +344,39 @@ function octaveColor(tuning, octave) {
     const ringCount = octaves.length;
     const pointSize = span > 30 ? 15 : span > 22 ? 19 : span > 16 ? 22 : 28;
     const densityBoost = span >= 30 ? 1.16 : span >= 24 ? 1.08 : 1.02;
-    const preferredBase = span >= 28 ? 420 : span >= 22 ? 380 : 360;
+    const preferredBase = span >= 28 ? 380 : span >= 22 ? 360 : 340;
     const preferredSize = Math.max(
       preferredBase * densityBoost,
       ringCount * (pointSize + 40)
     );
     const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
-    const circleSize = Math.min(preferredSize, Math.max(320, wrapSize - 12));
+    const circleSize = Math.min(preferredSize, Math.max(300, wrapSize - 12));
     noteCircle.style.width = `${circleSize}px`;
     noteCircle.style.height = `${circleSize}px`;
     const center = circleSize / 2;
     const maxRadius = center - pointSize / 2 - 8;
-    const innerRadius = Math.max(pointSize * 2.05, circleSize * 0.24, 68);
-    const availableRadius = Math.max(32, maxRadius - innerRadius);
-    const phaseSpacing = ringCount > 1 ? Math.min(12, Math.max(6, pointSize * 0.55)) : 0;
-    const ringSpacing =
-      ringCount > 1 ? (availableRadius - (ringCount - 1) * phaseSpacing) / (ringCount - 1) : 0;
-    const twistPerRing = Math.PI * 0.18 + (Math.PI * 2) / (span * 1.6);
-    const petalFrequency = Math.max(3, Math.round(span / 6));
-    const petalDepth = Math.min(pointSize * 0.55, 12);
-    const startAngle = -Math.PI / 2;
+    const innerRadius = Math.max(pointSize * 1.35, 34);
+    const ringSpacing = ringCount > 1 ? (maxRadius - innerRadius) / (ringCount - 1) : 0;
+    const spacingBoost = span >= 28 ? 5 : span >= 22 ? 3 : 0;
+    const twistPerRing = Math.PI / (span * 1.2);
 
     octaves.forEach((octave, ringIndex) => {
-      const baseRadius = innerRadius + ringIndex * (ringSpacing + phaseSpacing);
+      const radius = Math.min(maxRadius, innerRadius + ringIndex * (ringSpacing + spacingBoost));
       for (let degree = 0; degree < span; degree += 1) {
-        const baseAngle = startAngle + (Math.PI * 2 * degree) / span;
-        const petalOffset = Math.sin(baseAngle * petalFrequency + ringIndex * 0.9) * petalDepth;
-        const radius = Math.min(maxRadius, baseRadius + petalOffset);
+        const baseAngle = (Math.PI * 2 * degree) / span - Math.PI / 2;
         const angle = baseAngle + ringIndex * twistPerRing;
-        const sizeScale = 1.06 - ringIndex * (0.1 / Math.max(1, ringCount - 1));
-        const scaledPoint = pointSize * sizeScale;
-        const x = center + radius * Math.cos(angle) - scaledPoint / 2;
-        const y = center + radius * Math.sin(angle) - scaledPoint / 2;
+        const x = center + radius * Math.cos(angle) - pointSize / 2;
+        const y = center + radius * Math.sin(angle) - pointSize / 2;
         const absoluteDegree = degree + octave * span;
         const palette = octaveColor(tuning, octave);
         const isActive = chord.notes.includes(absoluteDegree);
         const point = document.createElement('div');
         point.className = 'note-point';
         point.classList.add(isActive ? 'active' : 'muted');
-        point.style.width = `${scaledPoint}px`;
-        point.style.height = `${scaledPoint}px`;
-        point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, scaledPoint - 8)}px`;
-        point.style.lineHeight = `${scaledPoint}px`;
+        point.style.width = `${pointSize}px`;
+        point.style.height = `${pointSize}px`;
+        point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, pointSize - 8)}px`;
+        point.style.lineHeight = `${pointSize}px`;
         point.style.left = `${x}px`;
         point.style.top = `${y}px`;
         point.style.setProperty('--bubble-main', palette.main);
