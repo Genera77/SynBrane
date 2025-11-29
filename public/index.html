@@ -51,20 +51,30 @@
               Chord preset
               <select id="chordPreset"></select>
             </label>
-            <label>
-              Arpeggiate
+            <label class="arp-block">
+              Arpeggiator
               <div class="inline-control">
-                <input type="checkbox" id="arpToggle" />
-                <span class="meta">Play notes in sequence</span>
+                <input type="checkbox" id="chordArpEnabled" />
+                <span class="meta">Enable per-chord arp</span>
               </div>
-              <input
-                id="arpRate"
-                type="range"
-                min="60"
-                max="600"
-                value="180"
-              />
-              <span class="meta" id="arpRateLabel">180 ms</span>
+              <div class="inline-control">
+                <span class="meta">Pattern</span>
+                <select id="chordArpPattern">
+                  <option value="up">Up</option>
+                  <option value="down">Down</option>
+                  <option value="updown">Up &amp; Down</option>
+                  <option value="random">Random</option>
+                </select>
+              </div>
+              <div class="inline-control">
+                <span class="meta">Rate</span>
+                <select id="chordArpRate">
+                  <option value="1/4">1/4</option>
+                  <option value="1/8" selected>1/8</option>
+                  <option value="1/8T">1/8T</option>
+                  <option value="1/16">1/16</option>
+                </select>
+              </div>
             </label>
             <label>
               Loop chord
@@ -116,6 +126,10 @@
               <option value="harmony">Harmony</option>
               <option value="rhythm">Rhythm</option>
             </select>
+          </label>
+          <label>
+            Chords in loop
+            <input id="loopChordCount" type="number" min="1" max="8" value="4" />
           </label>
           <label>
             Tempo

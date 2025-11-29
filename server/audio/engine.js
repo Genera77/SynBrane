@@ -50,20 +50,34 @@ const DRUM_VOICES = [
 
 function arpeggioStepDuration(rate, bpm) {
   const secondsPerBeat = 60 / Math.max(1, bpm || 120);
-  if (rate === '1/4') return secondsPerBeat;
-  if (rate === '1/16') return secondsPerBeat / 4;
-  return secondsPerBeat / 2;
+  const map = {
+    '1/4': 1,
+    '1/8': 0.5,
+    '1/8T': 1 / 3,
+    '1/16': 0.25,
+  };
+  const portion = map[rate] ?? 0.5;
+  return secondsPerBeat * portion;
 }
 
 function arpeggioCycle(freqs, pattern) {
   if (!freqs?.length) return [];
-  if (pattern === 'down') return [...freqs].slice().reverse();
-  if (pattern === 'upDown') {
-    const ascent = [...freqs];
-    const descent = freqs.length > 1 ? [...freqs].slice(1, -1).reverse() : [];
+  const sorted = [...freqs].slice().sort((a, b) => a - b);
+  if (pattern === 'down') return [...sorted].reverse();
+  if (pattern === 'updown') {
+    const ascent = [...sorted];
+    const descent = sorted.length > 1 ? sorted.slice(1, -1).reverse() : [];
     return [...ascent, ...descent];
   }
-  return [...freqs];
+  if (pattern === 'random') {
+    const shuffle = [...sorted];
+    for (let i = shuffle.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffle[i], shuffle[j]] = [shuffle[j], shuffle[i]];
+    }
+    return shuffle;
+  }
+  return [...sorted];
 }
 
 function clamp(value, min, max) {

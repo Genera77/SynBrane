@@ -199,7 +199,8 @@ function listTunings() {
     intervals: scale.intervals,
   }));
 
-  return { tunings: [...edoList, ...scala] };
+  const tunings = [...edoList, ...scala].filter((tuning) => !(tuning.type === 'edo' && tuning.value === 32));
+  return { tunings };
 }
 
 function chordFrequencies({ tuningType, tuningValue, chord, root = 0, baseFrequency }) {
