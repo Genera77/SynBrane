@@ -85,18 +85,22 @@ const defaultSynth = {
   detuneCents: 3,
 };
 
-const state = {
-  tunings: [],
-  baseFrequency: 440,
-  activeChord: 0,
-  chords: Array.from({ length: 4 }, () => ({ tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major' })),
-  mode: 'harmony',
-  bpm: 120,
-  rhythmSpeed: 0.3,
-  synth: JSON.parse(JSON.stringify(defaultSynth)),
-  preview: { arpeggiate: false, arpRateMs: 180, loop: false },
-  loopPreview: { ctx: null, timer: null, stop: false },
-};
+  const state = {
+    tunings: [],
+    baseFrequency: 440,
+    activeChord: 0,
+    chords: Array.from({ length: 4 }, () => ({ tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major' })),
+    mode: 'harmony',
+    bpm: 120,
+    rhythmSpeed: 0.3,
+    synth: JSON.parse(JSON.stringify(defaultSynth)),
+    preview: { arpeggiate: false, arpRateMs: 180, loop: false },
+    loopPreview: { ctx: null, timer: null, stop: false },
+  };
+
+  function clampRhythmSpeed(value) {
+    return Math.min(1, Math.max(0.1, Number(value) || 0.3));
+  }
 
 function updateStatus(text) {
   statusEl.textContent = text || '';
@@ -112,14 +116,17 @@ function getDegreeSpan(tuning) {
   return tuning.intervals?.length || tuning.count || 12;
 }
 
-function degreeLabel(tuning, degree, root = 0) {
-  const isRoot = degree % getDegreeSpan(tuning) === (root % getDegreeSpan(tuning));
-  if (tuning?.type === 'edo' && tuning.value === 12) {
-    const label = NOTE_NAMES_12[degree % 12];
-    return isRoot ? `${label} •` : label;
+  function degreeLabel(tuning, degree, root = 0) {
+    const span = getDegreeSpan(tuning);
+    const wrappedDegree = ((degree % span) + span) % span;
+    const wrappedRoot = ((root % span) + span) % span;
+    const isRoot = wrappedDegree === wrappedRoot;
+    if (tuning?.type === 'edo' && tuning.value === 12) {
+      const label = NOTE_NAMES_12[wrappedDegree % 12];
+      return isRoot ? `${label} •` : label;
+    }
+    return `${isRoot ? 'R ' : ''}deg ${wrappedDegree}`;
   }
-  return `${isRoot ? 'R ' : ''}deg ${degree}`;
-}
 
 function degreeToFrequency(tuningId, degree) {
   const tuning = getTuning(tuningId);
@@ -177,18 +184,20 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
   return Array.from(new Set(degrees)).sort((a, b) => a - b);
 }
 
-function normalizeChordNotes(chord) {
-  const tuning = getTuning(chord.tuningId);
-  const span = getDegreeSpan(tuning);
-  const maxDeg = Math.max(span, span * 2);
-  chord.notes = (chord.notes || [])
-    .map((deg) => {
-      const safe = Number.isFinite(deg) ? deg : 0;
-      return Math.max(0, Math.min(safe, maxDeg - 1));
-    });
-  if (!chord.notes.length) chord.notes = [];
-  return chord;
-}
+  function normalizeChordNotes(chord) {
+    const tuning = getTuning(chord.tuningId);
+    const span = getDegreeSpan(tuning);
+    const maxOctaveSpread = 2;
+    const minDeg = -maxOctaveSpread * span;
+    const maxDeg = (maxOctaveSpread + 1) * span - 1;
+    chord.notes = (chord.notes || [])
+      .map((deg) => {
+        const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
+        return Math.max(minDeg, Math.min(safe, maxDeg));
+      });
+    if (!chord.notes.length) chord.notes = [];
+    return chord;
+  }
 
 function renderChordSwitcher() {
   chordSwitcher.innerHTML = '';
@@ -242,74 +251,59 @@ function renderRootOptions() {
   chordRoot.value = chord.root || 0;
 }
 
-function fifthOrder(span, tuning) {
-  let step = 7;
-  if (tuning?.type === 'edo') {
-    step = Math.max(1, Math.round((tuning.value || span) * 7 / 12));
-  } else if (tuning?.intervals?.length) {
-    let best = 1;
-    let bestDiff = Infinity;
-    tuning.intervals.forEach((cents, idx) => {
-      const diff = Math.abs(cents - 700);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = idx || 1;
+  function renderCircle() {
+    const chord = state.chords[state.activeChord];
+    normalizeChordNotes(chord);
+    const tuning = getTuning(chord.tuningId);
+    const span = getDegreeSpan(tuning);
+    noteCircle.innerHTML = '';
+    const minOctave = -2;
+    const maxOctave = 2;
+    const octaves = [];
+    for (let octave = minOctave; octave <= maxOctave; octave += 1) {
+      octaves.push(octave);
+    }
+
+    const ringCount = octaves.length;
+    const pointSize = span > 24 ? 16 : span > 18 ? 22 : 30;
+    const circleSize = Math.max(260, ringCount * (pointSize + 26));
+    noteCircle.style.width = `${circleSize}px`;
+    noteCircle.style.height = `${circleSize}px`;
+    const center = circleSize / 2;
+    const maxRadius = center - pointSize / 2 - 6;
+    const innerRadius = Math.max(pointSize * 0.9, 22);
+    const ringSpacing = ringCount > 1 ? (maxRadius - innerRadius) / (ringCount - 1) : 0;
+
+    octaves.forEach((octave, ringIndex) => {
+      const radius = innerRadius + ringIndex * ringSpacing;
+      for (let degree = 0; degree < span; degree += 1) {
+        const angle = (Math.PI * 2 * degree) / span - Math.PI / 2;
+        const x = center + radius * Math.cos(angle) - pointSize / 2;
+        const y = center + radius * Math.sin(angle) - pointSize / 2;
+        const absoluteDegree = degree + octave * span;
+        const point = document.createElement('div');
+        point.className = `note-point ${chord.notes.includes(absoluteDegree) ? 'active' : ''}`;
+        point.style.width = `${pointSize}px`;
+        point.style.height = `${pointSize}px`;
+        point.style.fontSize = `${Math.max(10, pointSize - 8)}px`;
+        point.style.left = `${x}px`;
+        point.style.top = `${y}px`;
+        point.textContent = degreeLabel(tuning, degree, chord.root || 0);
+        point.title = `Degree ${degree} (oct ${octave >= 0 ? `+${octave}` : octave})`;
+        point.onclick = () => {
+          if (chord.notes.includes(absoluteDegree)) {
+            chord.notes = chord.notes.filter((n) => n !== absoluteDegree);
+          } else {
+            chord.notes = [...chord.notes, absoluteDegree].sort((a, b) => a - b);
+          }
+          normalizeChordNotes(chord);
+          renderCircle();
+        };
+        noteCircle.appendChild(point);
       }
     });
-    step = best;
+    renderIntervalPanels();
   }
-  const order = [];
-  const visited = new Set();
-  let current = 0;
-  for (let i = 0; i < span; i += 1) {
-    order.push(current);
-    visited.add(current);
-    current = (current + step) % span;
-    if (visited.has(current)) {
-      current = (current + 1) % span;
-    }
-  }
-  return order;
-}
-
-function renderCircle() {
-  const chord = state.chords[state.activeChord];
-  const tuning = getTuning(chord.tuningId);
-  const span = getDegreeSpan(tuning);
-  const basePoints = tuning?.type === 'edo' && tuning.value === 12 ? 12 : Math.min(span * 2, 40);
-  const highest = chord.notes.length ? Math.max(...chord.notes) + 1 : 0;
-  const totalPoints = Math.max(basePoints, highest, span);
-  noteCircle.innerHTML = '';
-  const circleSize = totalPoints > 28 ? 220 : 230;
-  noteCircle.style.width = `${circleSize}px`;
-  noteCircle.style.height = `${circleSize}px`;
-  const radius = circleSize / 2 - 28;
-  const center = circleSize / 2;
-  const order = fifthOrder(span, tuning);
-  for (let i = 0; i < totalPoints; i += 1) {
-    const degree = i < span ? order[i % span] : i;
-    const angle = (Math.PI * 2 * i) / totalPoints - Math.PI / 2;
-    const x = center + radius * Math.cos(angle) - 19;
-    const y = center + radius * Math.sin(angle) - 19;
-    const point = document.createElement('div');
-    point.className = `note-point ${chord.notes.includes(degree) ? 'active' : ''}`;
-    point.style.left = `${x}px`;
-    point.style.top = `${y}px`;
-    point.textContent = degreeLabel(tuning, degree % span, chord.root || 0);
-    point.title = `Degree ${degree}`;
-    point.onclick = () => {
-      if (chord.notes.includes(degree)) {
-        chord.notes = chord.notes.filter((n) => n !== degree);
-      } else {
-        chord.notes = [...chord.notes, degree].sort((a, b) => a - b);
-      }
-      normalizeChordNotes(chord);
-      renderCircle();
-    };
-    noteCircle.appendChild(point);
-  }
-  renderIntervalPanels();
-}
 
 function intervalLabelByIndex(idx) {
   const labels = ['Root', '2nd', '3rd', '4th', '5th', '6th', '7th', '9th', '11th', '13th'];
@@ -320,18 +314,18 @@ function renderIntervalPanels() {
   const chord = state.chords[state.activeChord];
   const tuning = getTuning(chord.tuningId);
   const span = getDegreeSpan(tuning);
-  const sorted = [...(chord.notes || [])].sort((a, b) => a - b);
-  const infoLines = [];
-  const freqLines = [];
-  sorted.forEach((degree, idx) => {
-    const offset = degree - (chord.root || 0);
-    const cents = centsForDegree(tuning, offset);
-    const label = degreeLabel(tuning, degree % span, chord.root || 0);
-    const name = intervalLabelByIndex(idx);
-    infoLines.push(`${name}: ${label} (${cents.toFixed(1)}¢ from root)`);
-    const freq = degreeToFrequency(chord.tuningId, degree).toFixed(2);
-    const steps = tuning?.type === 'edo' ? `${offset} steps` : `deg ${offset}`;
-    freqLines.push(`${label}: ${freq} Hz (${steps})`);
+    const sorted = [...(chord.notes || [])].sort((a, b) => a - b);
+    const infoLines = [];
+    const freqLines = [];
+    sorted.forEach((degree, idx) => {
+      const offset = degree - (chord.root || 0);
+      const cents = centsForDegree(tuning, offset);
+      const label = degreeLabel(tuning, degree, chord.root || 0);
+      const name = intervalLabelByIndex(idx);
+      infoLines.push(`${name}: ${label} (${cents.toFixed(1)}¢ from root)`);
+      const freq = degreeToFrequency(chord.tuningId, degree).toFixed(2);
+      const steps = tuning?.type === 'edo' ? `${offset} steps` : `deg ${offset}`;
+      freqLines.push(`${label}: ${freq} Hz (${steps})`);
   });
   intervalInfo.textContent = infoLines.join('\n') || 'Pick notes to see intervals.';
   frequencyInfo.textContent = freqLines.join('\n') || 'Frequencies will appear here.';
@@ -420,19 +414,20 @@ function attachControlListeners() {
 
   playActiveBtn.onclick = () => playChord(state.activeChord);
 
-  modeSelect.onchange = (e) => {
-    state.mode = e.target.value;
-  };
+    modeSelect.onchange = (e) => {
+      state.mode = e.target.value;
+    };
 
-  bpmInput.oninput = (e) => {
-    state.bpm = Number(e.target.value);
-    syncSynthLabels();
-  };
+    bpmInput.oninput = (e) => {
+      state.bpm = Number(e.target.value);
+      syncSynthLabels();
+    };
 
-  rhythmInput.oninput = (e) => {
-    state.rhythmSpeed = Number(e.target.value);
-    syncSynthLabels();
-  };
+    rhythmInput.oninput = (e) => {
+      state.rhythmSpeed = clampRhythmSpeed(e.target.value);
+      rhythmInput.value = state.rhythmSpeed;
+      syncSynthLabels();
+    };
 
   waveformSelect.onchange = (e) => {
     state.synth.waveform = e.target.value;
@@ -581,60 +576,63 @@ function scheduleChordPreview(chord, startTime, durationSec) {
   return lastNoteOffset + noteDuration + releaseSec;
 }
 
-async function playChord(index) {
-  try {
-    stopPreview();
-    const chord = state.chords[index];
-    ensureChordComplete(chord, index);
+  async function playChord(index) {
+    try {
+      stopPreview();
+      const chord = state.chords[index];
+      ensureChordComplete(chord, index);
 
-    const ctx = getPreviewContext();
-    const startTime = ctx.currentTime + 0.05;
-    const sustainDuration = 1;
-    const total = scheduleChordPreview(chord, startTime, sustainDuration);
+      const ctx = getPreviewContext();
+      const startTime = ctx.currentTime + 0.05;
+      const sustainDuration = 1;
+      const total = scheduleChordPreview(chord, startTime, sustainDuration);
 
-    updateStatus(`Previewing chord ${index + 1}`);
-    state.loopPreview.timer = setTimeout(() => {
-      if (state.preview.loop) {
-        playChord(index);
-      } else {
-        stopPreview('Preview ended');
-      }
-    }, (total + 0.2) * 1000);
+      updateStatus(`Previewing chord ${index + 1}`);
+      state.loopPreview.timer = setTimeout(() => {
+        if (state.preview.loop) {
+          playChord(index);
+        } else {
+          stopPreview('Preview ended');
+        }
+      }, (total + 0.2) * 1000);
 
-    const payload = {
-      tuningId: chord.tuningId,
-      chord: { id: `circle-${index}`, degrees: [...chord.notes] },
-      chordType: 'custom',
-      root: chord.root || 0,
-      frequencies: chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg)),
+      state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
+
+      const payload = {
+        tuningId: chord.tuningId,
+        chord: { id: `circle-${index}`, degrees: [...chord.notes] },
+        chordType: 'custom',
+        root: chord.root || 0,
+        frequencies: chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg)),
+        mode: state.mode,
+        bpm: state.bpm,
+        rhythmSpeed: state.rhythmSpeed,
+        synthSettings: { ...state.synth },
+      };
+      fetch(apiUrl('/api/play'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    } catch (error) {
+      updateStatus(error.message);
+      // eslint-disable-next-line no-console
+      console.error(error);
+    }
+  }
+
+  function buildLoopPayload() {
+    state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
+    const sequence = state.chords.map((chord, idx) => chordToEvent(chord, idx));
+    return {
       mode: state.mode,
       bpm: state.bpm,
       rhythmSpeed: state.rhythmSpeed,
-      synthSettings: state.synth,
+      synthSettings: { ...state.synth },
+      loopCount: 10,
+      sequence,
     };
-    fetch(apiUrl('/api/play'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-  } catch (error) {
-    updateStatus(error.message);
-    // eslint-disable-next-line no-console
-    console.error(error);
   }
-}
-
-function buildLoopPayload() {
-  const sequence = state.chords.map((chord, idx) => chordToEvent(chord, idx));
-  return {
-    mode: state.mode,
-    bpm: state.bpm,
-    rhythmSpeed: state.rhythmSpeed,
-    synthSettings: state.synth,
-    loopCount: 10,
-    sequence,
-  };
-}
 
 async function playLoop() {
   try {
@@ -644,7 +642,7 @@ async function playLoop() {
     const ctx = getPreviewContext();
     const beatsPerBar = 4;
     const baseBeatSeconds = 60 / Math.max(1, state.bpm);
-    const speedMultiplier = Math.max(0.0001, state.rhythmSpeed || 1);
+    const speedMultiplier = clampRhythmSpeed(state.rhythmSpeed);
     const barDuration = (baseBeatSeconds * beatsPerBar) / speedMultiplier;
     const startTime = ctx.currentTime + 0.1;
 
@@ -764,13 +762,11 @@ function applyPatch(data) {
     state.chords[idx].preset = entry.preset || state.chords[idx].preset || 'major';
     normalizeChordNotes(state.chords[idx]);
   });
-  if (data.global) {
-    state.mode = data.global.mode || state.mode;
-    state.bpm = Number(data.global.tempo || state.bpm);
-    const minRhythm = Number(rhythmInput.min) || 0;
-    const maxRhythm = Number(rhythmInput.max) || Infinity;
-    const nextRhythm = Number(data.global.rhythmMultiplier ?? state.rhythmSpeed);
-    state.rhythmSpeed = Math.min(maxRhythm, Math.max(minRhythm, nextRhythm));
+    if (data.global) {
+      state.mode = data.global.mode || state.mode;
+      state.bpm = Number(data.global.tempo || state.bpm);
+      const nextRhythm = Number(data.global.rhythmMultiplier ?? state.rhythmSpeed);
+      state.rhythmSpeed = clampRhythmSpeed(nextRhythm);
     if (data.global.synth) {
       state.synth = {
         waveform: data.global.synth.waveform || state.synth.waveform,
