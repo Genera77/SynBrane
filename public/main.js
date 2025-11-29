@@ -136,7 +136,7 @@ function getDegreeSpan(tuning) {
       const label = NOTE_NAMES_12[wrappedDegree % 12];
       return isRoot ? `${label} •` : label;
     }
-    return `${isRoot ? 'R ' : ''}deg ${wrappedDegree}`;
+    return `${isRoot ? 'R ' : ''}${wrappedDegree}°`;
   }
 
 function degreeToFrequency(tuningId, degree) {
@@ -276,19 +276,23 @@ function renderRootOptions() {
     }
 
     const ringCount = octaves.length;
-    const pointSize = span > 24 ? 16 : span > 18 ? 22 : 30;
-    const circleSize = Math.max(260, ringCount * (pointSize + 26));
+    const pointSize = span > 30 ? 14 : span > 22 ? 18 : span > 16 ? 22 : 28;
+    const preferredSize = Math.max(span > 24 ? 360 : 340, ringCount * (pointSize + 36));
+    const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
+    const circleSize = Math.min(preferredSize, Math.max(280, wrapSize - 24));
     noteCircle.style.width = `${circleSize}px`;
     noteCircle.style.height = `${circleSize}px`;
     const center = circleSize / 2;
-    const maxRadius = center - pointSize / 2 - 6;
-    const innerRadius = Math.max(pointSize * 0.9, 22);
+    const maxRadius = center - pointSize / 2 - 10;
+    const innerRadius = Math.max(pointSize * 1.25, 30);
     const ringSpacing = ringCount > 1 ? (maxRadius - innerRadius) / (ringCount - 1) : 0;
+    const twistPerRing = Math.PI / (span * 1.25);
 
     octaves.forEach((octave, ringIndex) => {
       const radius = innerRadius + ringIndex * ringSpacing;
       for (let degree = 0; degree < span; degree += 1) {
-        const angle = (Math.PI * 2 * degree) / span - Math.PI / 2;
+        const baseAngle = (Math.PI * 2 * degree) / span - Math.PI / 2;
+        const angle = baseAngle + ringIndex * twistPerRing;
         const x = center + radius * Math.cos(angle) - pointSize / 2;
         const y = center + radius * Math.sin(angle) - pointSize / 2;
         const absoluteDegree = degree + octave * span;
@@ -296,7 +300,7 @@ function renderRootOptions() {
         point.className = `note-point ${chord.notes.includes(absoluteDegree) ? 'active' : ''}`;
         point.style.width = `${pointSize}px`;
         point.style.height = `${pointSize}px`;
-        point.style.fontSize = `${Math.max(10, pointSize - 8)}px`;
+        point.style.fontSize = `${Math.max(9, pointSize - 6)}px`;
         point.style.left = `${x}px`;
         point.style.top = `${y}px`;
         point.textContent = degreeLabel(tuning, degree, chord.root || 0);
@@ -318,7 +322,7 @@ function renderRootOptions() {
 
 function intervalLabelByIndex(idx) {
   const labels = ['Root', '2nd', '3rd', '4th', '5th', '6th', '7th', '9th', '11th', '13th'];
-  return labels[idx] || `deg ${idx}`;
+  return labels[idx] || `${idx}°`;
 }
 
 function renderIntervalPanels() {
@@ -335,7 +339,7 @@ function renderIntervalPanels() {
       const name = intervalLabelByIndex(idx);
       infoLines.push(`${name}: ${label} (${cents.toFixed(1)}¢ from root)`);
       const freq = degreeToFrequency(chord.tuningId, degree).toFixed(2);
-      const steps = tuning?.type === 'edo' ? `${offset} steps` : `deg ${offset}`;
+      const steps = tuning?.type === 'edo' ? `${offset} steps` : `${offset}°`;
       freqLines.push(`${label}: ${freq} Hz (${steps})`);
   });
   intervalInfo.textContent = infoLines.join('\n') || 'Pick notes to see intervals.';

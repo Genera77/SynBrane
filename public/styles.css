@@ -62,10 +62,10 @@ main {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .panel-header {
@@ -171,7 +171,7 @@ button.secondary {
 .chord-controls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .note-circle-wrap {
@@ -179,21 +179,24 @@ button.secondary {
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: 10px 0 18px;
 }
 
 .note-circle {
   position: relative;
-  width: 230px;
-  height: 230px;
+  width: 320px;
+  height: 320px;
   border-radius: 50%;
   border: 1px dashed var(--border);
-  margin: 0 auto;
+  margin: 8px auto 0 auto;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .note-point {
   position: absolute;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: #1c222d;
@@ -203,7 +206,7 @@ button.secondary {
   color: var(--text);
   cursor: pointer;
   transition: all 0.15s ease;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .note-point.active {
@@ -268,7 +271,7 @@ button.secondary {
   }
 
   .note-circle {
-    width: 220px;
-    height: 220px;
+    width: 260px;
+    height: 260px;
   }
 }
