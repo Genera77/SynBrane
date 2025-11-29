@@ -9,7 +9,7 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
   - Chords panel: four chord slots navigated via tabs. Each chord stores its own tuning, root, and selected degrees on a concentric circular picker that shows the octave rings (-2 to +2) for the current temperament rather than any circle-of-fifths ordering. Preset chords (major, minor, dominant 7, suspended, add9/add11/add13, etc.) remap their target intervals to the currently selected temperament, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz), and chord previews support arpeggiation and looped playback.
   - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, and filter settings, plus loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments.
   - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth/preview plus per-chord tuning, root, preset id, and selected degrees. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
-  - Loop playback/render: builds a four-event sequence (one per chord) with explicit tuning ids, degree lists, and derived frequencies and sends it to `/api/play` or `/api/render`. Chord and loop preview buttons trigger immediate Web Audio playback in the browser using the active synth/filter/envelope settings (while still sending `/api/play` in the background for parity), and the same synth payload is forwarded for renders.
+  - Loop playback/render: builds a four-event sequence (one per chord) with explicit tuning ids, degree lists, and derived frequencies and sends it to `/api/render`. Chord and loop preview buttons trigger immediate Web Audio playback in the browser using the active synth/filter/envelope settings, and the same synth payload is forwarded for renders.
 
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
@@ -28,7 +28,7 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 ## Audio behavior
 - **Harmony mode (Node DSP)**: oscillator waveforms (sine/saw/square), ADSR envelope, optional resonant low-pass filter, and loudness normalized around -4 dBFS. Arpeggio patterns are present in the backend but the current UI sends stacked chord events.
   - **Rhythm mode (Node DSP)**: drum-like hits with overtone partials and saturation. Rhythm-speed slider now spans roughly 0.1–1.0× to slow or subtly accelerate patterns.
-- **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews while still calling backend play endpoints for parity. The preview path now supports arpeggiated or looped chords with per-note detune for smoother stacks.
+- **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews without relying on backend playback. The preview path supports arpeggiated or looped chords with per-note detune for smoother stacks.
 
 ## Deployment model
 - Backend (Node + audio engine) runs on a DigitalOcean droplet at `http://147.182.251.148:3000`.
