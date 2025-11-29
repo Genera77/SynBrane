@@ -43,10 +43,10 @@ const DRUM_VOICES = [
   { baseFrequency: 520, decay: 0.06, noiseMix: 0.35, partials: [5, 9, 13, 17], saturation: 0.9, amplitude: 0.6 },
 ];
 
-function mapFrequenciesToRhythm(frequencies, mappingFactor) {
-  const multiplier = Math.max(0.5, Number(mappingFactor) || 3);
-  return frequencies.map((freq) => Math.max(0.5, freq * RHYTHM_BASE_MAPPING * multiplier));
-}
+  function mapFrequenciesToRhythm(frequencies, mappingFactor) {
+    const multiplier = clamp(Number(mappingFactor) || 1, 0.1, 1);
+    return frequencies.map((freq) => Math.max(0.25, freq * RHYTHM_BASE_MAPPING * multiplier));
+  }
 
 function arpeggioStepDuration(rate, bpm) {
   const secondsPerBeat = 60 / Math.max(1, bpm || 120);
