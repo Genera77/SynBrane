@@ -12,7 +12,7 @@ function dbToLinear(db) {
   return 10 ** (db / 20);
 }
 
-function applyNormalization(samples, targetDb = -4) {
+function applyNormalization(samples, targetDb = -5) {
   const targetPeak = dbToLinear(targetDb);
   let peak = 0;
   for (let i = 0; i < samples.length; i += 1) {
@@ -357,9 +357,11 @@ function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor,
 }
 
 function encodeWav(samples, sampleRate) {
-  const byteRate = sampleRate * 2;
-  const blockAlign = 2;
-  const dataSize = samples.length * 2;
+  const bitDepth = 24;
+  const bytesPerSample = bitDepth / 8;
+  const byteRate = sampleRate * bytesPerSample;
+  const blockAlign = bytesPerSample;
+  const dataSize = samples.length * bytesPerSample;
   const buffer = Buffer.alloc(44 + dataSize);
   buffer.write('RIFF', 0);
   buffer.writeUInt32LE(36 + dataSize, 4);
@@ -371,12 +373,13 @@ function encodeWav(samples, sampleRate) {
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(byteRate, 28);
   buffer.writeUInt16LE(blockAlign, 32);
-  buffer.writeUInt16LE(16, 34); // bits per sample
+  buffer.writeUInt16LE(bitDepth, 34); // bits per sample
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
   for (let i = 0; i < samples.length; i += 1) {
     const clamped = Math.max(-1, Math.min(1, samples[i]));
-    buffer.writeInt16LE(Math.round(clamped * 32767), 44 + i * 2);
+    const value = Math.round(clamped * 0x7fffff);
+    buffer.writeIntLE(value, 44 + i * bytesPerSample, bytesPerSample);
   }
   return buffer;
 }
