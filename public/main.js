@@ -53,9 +53,6 @@ const player = document.getElementById('player');
 const savePatchBtn = document.getElementById('savePatch');
 const loadPatchBtn = document.getElementById('loadPatch');
 const patchFileInput = document.getElementById('patchFile');
-const aboutButton = document.getElementById('aboutButton');
-const aboutModal = document.getElementById('aboutModal');
-const aboutCloseBtn = document.getElementById('aboutClose');
 
 const NOTE_NAMES_12 = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -137,20 +134,6 @@ function waveformToOscType(waveform) {
 
 function updateStatus(text) {
   statusEl.textContent = text || '';
-}
-
-function openAbout() {
-  if (!aboutModal) return;
-  aboutModal.classList.remove('hidden');
-  aboutModal.setAttribute('aria-hidden', 'false');
-  document.body.classList.add('about-open');
-}
-
-function closeAbout() {
-  if (!aboutModal) return;
-  aboutModal.classList.add('hidden');
-  aboutModal.setAttribute('aria-hidden', 'true');
-  document.body.classList.remove('about-open');
 }
 
 function getTuning(id) {
@@ -484,23 +467,6 @@ function syncSynthLabels() {
 }
 
 function attachControlListeners() {
-  if (aboutButton) {
-    aboutButton.onclick = openAbout;
-  }
-  if (aboutCloseBtn) {
-    aboutCloseBtn.onclick = closeAbout;
-  }
-  if (aboutModal) {
-    aboutModal.addEventListener('click', (e) => {
-      if (e.target === aboutModal) closeAbout();
-    });
-  }
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && aboutModal && !aboutModal.classList.contains('hidden')) {
-      closeAbout();
-    }
-  });
-
   chordTuning.onchange = (e) => {
     const chord = state.chords[state.activeChord];
     chord.tuningId = e.target.value;
