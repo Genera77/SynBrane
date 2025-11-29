@@ -359,6 +359,16 @@ button.secondary {
   align-items: center;
 }
 
+.render-preview {
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.render-preview audio {
+  width: 320px;
+  max-width: 100%;
+}
+
 .chord-insights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
