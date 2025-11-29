@@ -31,22 +31,24 @@ function applyNormalization(samples, targetDb = -4) {
   return { gain, peak };
 }
 
-const RHYTHM_BASE_MAPPING = 0.005;
-
-const DRUM_VOICES = [
-  { baseFrequency: 70, decay: 0.28, noiseMix: 0.12, partials: [1, 1.7, 2.2, 3.1], saturation: 0.8, amplitude: 0.95 },
-  { baseFrequency: 105, decay: 0.22, noiseMix: 0.1, partials: [1, 1.9, 2.6, 3.6], saturation: 0.8, amplitude: 0.85 },
-  { baseFrequency: 150, decay: 0.18, noiseMix: 0.14, partials: [1, 2.3, 3.3, 4.6], saturation: 0.8, amplitude: 0.8 },
-  { baseFrequency: 320, decay: 0.08, noiseMix: 0.55, partials: [2, 5, 7, 11], saturation: 0.9, amplitude: 0.7 },
-  { baseFrequency: 320, decay: 0.18, noiseMix: 0.6, partials: [3, 7, 10, 14], saturation: 0.95, amplitude: 0.75 },
-  { baseFrequency: 380, decay: 0.22, noiseMix: 0.45, partials: [3, 7, 11, 15], saturation: 0.85, amplitude: 0.7 },
-  { baseFrequency: 520, decay: 0.06, noiseMix: 0.35, partials: [5, 9, 13, 17], saturation: 0.9, amplitude: 0.6 },
-];
-
-  function mapFrequenciesToRhythm(frequencies, mappingFactor) {
-    const multiplier = clamp(Number(mappingFactor) || 1, 0.1, 1);
-    return frequencies.map((freq) => Math.max(0.25, freq * RHYTHM_BASE_MAPPING * multiplier));
-  }
+const DRUM_ROLE_CONFIG = {
+  kick: { amplitude: 1, attack: 0.003, decay: 0.32, baseFrequency: 55, partials: [1, 2.1, 2.9], noiseMix: 0.05, saturation: 0.9 },
+  snare: {
+    amplitude: 0.85,
+    attack: 0.002,
+    decay: 0.22,
+    baseFrequency: 185,
+    partials: [1.4, 2.4, 3.6, 4.5],
+    noiseMix: 0.65,
+    saturation: 0.92,
+  },
+  closedHat: { amplitude: 0.6, attack: 0.0015, decay: 0.12, baseFrequency: 4200, partials: [3, 5, 7, 9], noiseMix: 0.75, saturation: 0.7 },
+  openHat: { amplitude: 0.55, attack: 0.002, decay: 0.35, baseFrequency: 3600, partials: [3, 6, 9, 12], noiseMix: 0.75, saturation: 0.8 },
+  lowTom: { amplitude: 0.8, attack: 0.003, decay: 0.22, baseFrequency: 130, partials: [1, 2.2, 3.1], noiseMix: 0.12, saturation: 0.8 },
+  highTom: { amplitude: 0.75, attack: 0.003, decay: 0.18, baseFrequency: 200, partials: [1, 2.4, 3.6], noiseMix: 0.12, saturation: 0.75 },
+  clap: { amplitude: 0.6, attack: 0.001, decay: 0.18, baseFrequency: 900, partials: [2.2, 3.5], noiseMix: 0.95, saturation: 0.95 },
+  perc: { amplitude: 0.55, attack: 0.001, decay: 0.14, baseFrequency: 320, partials: [2, 5, 7], noiseMix: 0.4, saturation: 0.85 },
+};
 
 function arpeggioStepDuration(rate, bpm) {
   const secondsPerBeat = 60 / Math.max(1, bpm || 120);
@@ -166,52 +168,69 @@ function applyLowPassFilter(samples, sampleRate, cutoffHz, resonance = 0.2) {
   }
 }
 
-function addBackboneHits(samples, startSample, sampleRate, durationSeconds, bpm) {
-  const secondsPerBeat = 60 / bpm;
-  const totalBeats = Math.ceil(durationSeconds / secondsPerBeat);
-  for (let beat = 0; beat < totalBeats; beat += 1) {
-    const hitSample = startSample + Math.floor(beat * secondsPerBeat * sampleRate);
-    addPercussiveHit(samples, hitSample, sampleRate, {
-      amplitude: 1,
-      attack: 0.003,
-      decay: 0.26,
-      baseFrequency: 55,
-      partials: [1, 2.1, 2.9],
-      noiseMix: 0.08,
-      saturation: 0.9,
-    });
-    if (beat % 4 === 1 || beat % 4 === 3) {
-      addPercussiveHit(samples, hitSample, sampleRate, {
-        amplitude: 0.8,
-        attack: 0.002,
-        decay: 0.18,
-        baseFrequency: 180,
-        partials: [1.5, 2.5, 3.5, 4.5],
-        noiseMix: 0.6,
-        saturation: 0.9,
-      });
-    }
-  }
+function rhythmStepCount(speed) {
+  const value = clamp(Number(speed) || 0.3, 0.1, 1);
+  if (value < 0.25) return 4;
+  if (value < 0.5) return 8;
+  if (value < 0.75) return 12;
+  return 16;
 }
 
-function addRhythmVoices(samples, startSample, sampleRate, durationSeconds, frequencies, mappingFactor) {
-  const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 3);
-  const durationSamples = Math.floor(durationSeconds * sampleRate);
-  rates.forEach((rate, index) => {
-    const intervalSamples = Math.max(1, Math.floor(sampleRate / rate));
-    const voice = DRUM_VOICES[index] || DRUM_VOICES[DRUM_VOICES.length - 1];
-    for (let offset = 0; offset < durationSamples; offset += intervalSamples) {
-      addPercussiveHit(samples, startSample + offset, sampleRate, {
-        amplitude: voice.amplitude || 0.6,
-        attack: voice.attack ?? 0.004,
-        decay: voice.decay ?? 0.12,
-        baseFrequency: voice.baseFrequency ?? Math.max(40, Math.min((frequencies[index] || 80) * 0.5, 260)),
-        partials: voice.partials,
-        noiseMix: voice.noiseMix ?? 0.35,
-        saturation: voice.saturation ?? 0.85,
-      });
+function buildRhythmPattern({ degrees = [], durationSeconds, bpm, rhythmSpeed, fallbackCount = 0 }) {
+  const steps = rhythmStepCount(rhythmSpeed);
+  const stepDuration = durationSeconds / steps;
+  const events = [];
+  const addEvent = (role, step, velocity = 1) => {
+    const clampedStep = Math.max(0, Math.min(steps - 1, Math.round(step)));
+    events.push({
+      role,
+      time: clampedStep * stepDuration,
+      velocity: Math.max(0.25, Math.min(1.1, velocity)),
+    });
+  };
+
+  const quarter = steps / 4;
+  addEvent('kick', 0, 1);
+  addEvent('kick', quarter * 2, 0.9);
+  addEvent('snare', quarter, 0.9);
+  addEvent('snare', quarter * 3, 0.95);
+
+  const hatSpacing = rhythmSpeed > 0.75 ? 1 : rhythmSpeed > 0.5 ? 2 : rhythmSpeed > 0.35 ? 4 : 8;
+  for (let step = 0; step < steps; step += hatSpacing) {
+    addEvent('closedHat', step, 0.55 + 0.25 * rhythmSpeed);
+  }
+  addEvent('openHat', Math.max(1, steps - Math.round(steps / 4)), 0.65 + 0.25 * rhythmSpeed);
+
+  const degreeSource = degrees?.length
+    ? Array.from(new Set(degrees)).sort((a, b) => a - b)
+    : Array.from({ length: Math.max(1, fallbackCount || 1) }, (_, idx) => idx);
+  const roleOrder = ['kick', 'snare', 'closedHat', 'openHat', 'lowTom', 'highTom', 'clap', 'perc'];
+  degreeSource.forEach((deg, idx) => {
+    const role = roleOrder[Math.min(idx, roleOrder.length - 1)];
+    const baseStep = Math.abs(deg) % steps;
+    const repeats = rhythmSpeed > 0.7 ? 2 : 1;
+    for (let rep = 0; rep < repeats; rep += 1) {
+      const offsetStep = (baseStep + rep * Math.max(1, Math.floor(steps / (repeats * 4)))) % steps;
+      const velocity = Math.max(0.35, 0.9 - idx * 0.08 + rhythmSpeed * 0.1);
+      addEvent(role, offsetStep, velocity);
     }
   });
+
+  events.sort((a, b) => a.time - b.time);
+  return { events, duration: durationSeconds + 0.25 };
+}
+
+function addRhythmPatternHits(samples, startSample, sampleRate, pattern) {
+  pattern.events.forEach((event) => {
+    const baseConfig = DRUM_ROLE_CONFIG[event.role] || DRUM_ROLE_CONFIG.perc;
+    const amplitude = clamp((baseConfig.amplitude || 0.6) * event.velocity, 0, 1.35);
+    addPercussiveHit(samples, startSample + Math.floor(event.time * sampleRate), sampleRate, {
+      ...baseConfig,
+      amplitude,
+    });
+  });
+
+  return pattern.duration;
 }
 
 function generateArpeggiatedSamples({ frequencies, duration, sampleRate, synth, bpm, arpeggio }) {
@@ -251,12 +270,20 @@ function generateArpeggiatedSamples({ frequencies, duration, sampleRate, synth, 
   return samples;
 }
 
-function generateChordSamples({ mode, frequencies = [], duration, sampleRate, mappingFactor, synthSettings, bpm = 120, arpeggio }) {
+function generateChordSamples({ mode, frequencies = [], degrees = [], duration, sampleRate, mappingFactor, synthSettings, bpm = 120, arpeggio }) {
   if (mode === 'rhythm') {
-    const totalSamples = Math.floor(sampleRate * duration);
+    const speed = clamp(mappingFactor ?? 0.3, 0.1, 1);
+    const durationSeconds = duration || 1;
+    const pattern = buildRhythmPattern({
+      degrees,
+      durationSeconds,
+      bpm,
+      rhythmSpeed: speed,
+      fallbackCount: frequencies.length || degrees.length,
+    });
+    const totalSamples = Math.max(1, Math.floor(sampleRate * pattern.duration));
     const samples = new Float32Array(totalSamples);
-    addBackboneHits(samples, 0, sampleRate, duration, bpm);
-    addRhythmVoices(samples, 0, sampleRate, duration, frequencies, mappingFactor);
+    addRhythmPatternHits(samples, 0, sampleRate, pattern);
     return samples;
   }
 
@@ -354,6 +381,7 @@ function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor,
     const buffer = generateChordSamples({
       mode,
       frequencies: event.frequencies || [],
+      degrees: event.degrees || event.customChord?.degrees || [],
       duration,
       sampleRate,
       mappingFactor,
@@ -395,7 +423,7 @@ function encodeWav(samples, sampleRate) {
   return buffer;
 }
 
-function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed, events, bpm, synthSettings, arpeggio }) {
+function renderToFile({ mode, frequencies, degrees = [], duration, mappingFactor, rhythmSpeed, events, bpm, synthSettings, arpeggio }) {
   ensureDir(config.renderOutputDir);
   const sampleRate = config.renderSampleRate;
   const effectiveMapping = rhythmSpeed ?? mappingFactor;
@@ -406,6 +434,7 @@ function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed,
     samples = generateChordSamples({
       mode,
       frequencies,
+      degrees,
       duration,
       sampleRate,
       mappingFactor: effectiveMapping,

@@ -97,7 +97,7 @@ function defaultChord() {
   return { tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major', arp: defaultArp() };
 }
 
-const MAX_CHORDS = 8;
+const MAX_CHORDS = 5;
 
 const state = {
   tunings: [],
@@ -110,12 +110,16 @@ const state = {
   rhythmSpeed: 0.3,
   synth: JSON.parse(JSON.stringify(defaultSynth)),
   preview: { arpeggiate: false, arpRateMs: 180, loop: false },
-  loopPreview: { ctx: null, timer: null, stop: false, nodes: [] },
+  loopPreview: { ctx: null, timer: null, stop: false, nodes: [], noiseBuffer: null },
 };
 
-  function clampRhythmSpeed(value) {
-    return Math.min(1, Math.max(0.1, Number(value) || 0.3));
-  }
+function clampRhythmSpeed(value) {
+  return Math.min(1, Math.max(0.1, Number(value) || 0.3));
+}
+
+function clampLoopChordCount(value) {
+  return Math.max(1, Math.min(MAX_CHORDS, Math.round(Number(value) || 1)));
+}
 
 const OSC_TYPE_MAP = {
   sine: 'sine',
@@ -230,7 +234,7 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
 
 function renderChordSwitcher() {
   chordSwitcher.innerHTML = '';
-  const visibleChords = Math.max(1, Math.min(state.loopChordCount || 1, state.chords.length));
+  const visibleChords = Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount || 1), state.chords.length));
   if (state.activeChord >= visibleChords) {
     state.activeChord = visibleChords - 1;
   }
@@ -518,8 +522,9 @@ function attachControlListeners() {
   };
 
   loopChordCountInput.onchange = (e) => {
-    const value = Math.max(1, Math.min(MAX_CHORDS, Number(e.target.value) || 1));
+    const value = clampLoopChordCount(e.target.value);
     state.loopChordCount = value;
+    loopChordCountInput.value = state.loopChordCount;
     renderChordSwitcher();
     renderActiveChord();
   };
@@ -612,6 +617,8 @@ function chordToEvent(chord, index) {
     chordType: 'custom',
     chord: { id: `circle-${index}`, degrees: [...chord.notes] },
     customChord: { degrees: [...chord.notes] },
+    degrees: [...chord.notes],
+    noteCount: chord.notes.length,
     frequencies,
     arpeggioEnabled: Boolean(chord.arp?.enabled),
     arpeggioPattern: chord.arp?.pattern || 'up',
@@ -687,7 +694,203 @@ function stepDurationFromRate(rate, bpm) {
   return secondsPerBeat * beatPortion;
 }
 
-function scheduleChordPreview(chord, startTime, durationSec) {
+function getNoiseBuffer(ctx) {
+  if (state.loopPreview.noiseBuffer) return state.loopPreview.noiseBuffer;
+  const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * 1.5)), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i += 1) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  state.loopPreview.noiseBuffer = buffer;
+  return buffer;
+}
+
+function rhythmStepCount(speed) {
+  const value = clampRhythmSpeed(speed);
+  if (value < 0.25) return 4;
+  if (value < 0.5) return 8;
+  if (value < 0.75) return 12;
+  return 16;
+}
+
+function buildRhythmPattern({ degrees = [], durationSec, bpm, rhythmSpeed, voiceCount = 0 }) {
+  const steps = rhythmStepCount(rhythmSpeed);
+  const stepDuration = durationSec / steps;
+  const events = [];
+  const addEvent = (role, step, velocity = 1) => {
+    const clampedStep = Math.max(0, Math.min(steps - 1, Math.round(step)));
+    events.push({
+      role,
+      time: clampedStep * stepDuration,
+      velocity: Math.max(0.25, Math.min(1.1, velocity)),
+    });
+  };
+
+  const quarter = steps / 4;
+  addEvent('kick', 0, 1);
+  addEvent('kick', quarter * 2, 0.9);
+  addEvent('snare', quarter, 0.9);
+  addEvent('snare', quarter * 3, 0.95);
+
+  const hatSpacing = rhythmSpeed > 0.75 ? 1 : rhythmSpeed > 0.5 ? 2 : rhythmSpeed > 0.35 ? 4 : 8;
+  for (let step = 0; step < steps; step += hatSpacing) {
+    addEvent('closedHat', step, 0.55 + 0.25 * rhythmSpeed);
+  }
+  addEvent('openHat', Math.max(1, steps - Math.round(steps / 4)), 0.65 + 0.25 * rhythmSpeed);
+
+  const degreeSource = degrees?.length
+    ? Array.from(new Set(degrees)).sort((a, b) => a - b)
+    : Array.from({ length: Math.max(1, voiceCount || 1) }, (_, idx) => idx);
+  const roleOrder = ['kick', 'snare', 'closedHat', 'openHat', 'lowTom', 'highTom', 'clap', 'perc'];
+  degreeSource.forEach((deg, idx) => {
+    const role = roleOrder[Math.min(idx, roleOrder.length - 1)];
+    const baseStep = Math.abs(deg) % steps;
+    const repeats = rhythmSpeed > 0.7 ? 2 : 1;
+    for (let rep = 0; rep < repeats; rep += 1) {
+      const offsetStep = (baseStep + rep * Math.max(1, Math.floor(steps / (repeats * 4)))) % steps;
+      const velocity = Math.max(0.35, 0.9 - idx * 0.08 + rhythmSpeed * 0.1);
+      addEvent(role, offsetStep, velocity);
+    }
+  });
+
+  events.sort((a, b) => a.time - b.time);
+  const tail = 0.3;
+  return { events, duration: durationSec + tail };
+}
+
+function triggerDrum(role, ctx, when, velocity = 1) {
+  const safeVelocity = Math.max(0.2, Math.min(1.25, velocity));
+  const nodes = [];
+  const destination = ctx.destination;
+
+  const connectGain = (gain) => {
+    gain.connect(destination);
+    nodes.push(gain);
+  };
+
+  if (role === 'kick') {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(110, when);
+    osc.frequency.exponentialRampToValueAtTime(55, when + 0.22);
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(1.05 * safeVelocity, when + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.45);
+    osc.connect(gain);
+    connectGain(gain);
+    osc.start(when);
+    osc.stop(when + 0.5);
+    nodes.push(osc);
+  } else if (role === 'snare') {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(1800, when);
+    noiseFilter.Q.setValueAtTime(1, when);
+
+    const tone = ctx.createOscillator();
+    tone.type = 'triangle';
+    tone.frequency.setValueAtTime(210, when);
+    tone.frequency.exponentialRampToValueAtTime(140, when + 0.18);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(0.95 * safeVelocity, when + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.32);
+
+    noise.connect(noiseFilter);
+    noiseFilter.connect(gain);
+    tone.connect(gain);
+    connectGain(gain);
+
+    noise.start(when);
+    noise.stop(when + 0.35);
+    tone.start(when);
+    tone.stop(when + 0.35);
+    nodes.push(noise, noiseFilter, tone);
+  } else if (role === 'closedHat' || role === 'openHat') {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+    const highPass = ctx.createBiquadFilter();
+    highPass.type = 'highpass';
+    highPass.frequency.setValueAtTime(role === 'openHat' ? 6500 : 7200, when);
+    highPass.Q.setValueAtTime(0.7, when);
+
+    const gain = ctx.createGain();
+    const decay = role === 'openHat' ? 0.42 : 0.16;
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(0.65 * safeVelocity, when + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+
+    noise.connect(highPass);
+    highPass.connect(gain);
+    connectGain(gain);
+
+    noise.start(when);
+    noise.stop(when + decay + 0.05);
+    nodes.push(noise, highPass);
+  } else if (role === 'lowTom' || role === 'highTom') {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    const base = role === 'lowTom' ? 130 : 190;
+    osc.frequency.setValueAtTime(base * 1.2, when);
+    osc.frequency.exponentialRampToValueAtTime(base * 0.9, when + 0.22);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(0.85 * safeVelocity, when + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.32);
+    osc.connect(gain);
+    connectGain(gain);
+    osc.start(when);
+    osc.stop(when + 0.35);
+    nodes.push(osc);
+  } else {
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(role === 'clap' ? 1200 : 2600, when);
+    filter.Q.setValueAtTime(role === 'clap' ? 0.6 : 1.4, when);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, when);
+    const decay = role === 'clap' ? 0.18 : 0.14;
+    gain.gain.exponentialRampToValueAtTime(0.8 * safeVelocity, when + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    connectGain(gain);
+
+    noise.start(when);
+    noise.stop(when + decay + 0.05);
+    nodes.push(noise, filter);
+  }
+
+  trackPreviewNodes(...nodes);
+  return nodes.length ? 0.5 : 0;
+}
+
+function scheduleRhythmPreview(chord, startTime, durationSec) {
+  if (state.loopPreview.stop) return 0;
+  const ctx = getPreviewContext();
+  const pattern = buildRhythmPattern({
+    degrees: chord.notes || [],
+    durationSec,
+    bpm: state.bpm,
+    rhythmSpeed: clampRhythmSpeed(state.rhythmSpeed),
+    voiceCount: chord.notes?.length || 0,
+  });
+
+  pattern.events.forEach((event) => {
+    triggerDrum(event.role, ctx, startTime + event.time, event.velocity);
+  });
+
+  return pattern.duration;
+}
+
+function scheduleHarmonyPreview(chord, startTime, durationSec) {
   if (state.loopPreview.stop) return 0;
   const tuning = getTuning(chord.tuningId);
   if (!tuning) throw new Error('Chord missing tuning');
@@ -745,6 +948,13 @@ function scheduleChordPreview(chord, startTime, durationSec) {
   return lastOffset + releaseSec;
 }
 
+function scheduleChordPreview(chord, startTime, durationSec) {
+  if (state.mode === 'rhythm') {
+    return scheduleRhythmPreview(chord, startTime, durationSec);
+  }
+  return scheduleHarmonyPreview(chord, startTime, durationSec);
+}
+
   async function playChord(index) {
     try {
       stopPreview();
@@ -753,7 +963,8 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 
       const ctx = getPreviewContext();
       const startTime = ctx.currentTime + 0.05;
-      const sustainDuration = 1;
+      const beatsPerBar = 4;
+      const sustainDuration = state.mode === 'rhythm' ? (60 / Math.max(30, state.bpm)) * beatsPerBar : 1;
       const total = scheduleChordPreview(chord, startTime, sustainDuration);
 
       updateStatus(`Previewing chord ${index + 1}`);
@@ -775,7 +986,7 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 
   function buildLoopPayload() {
     state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
-    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(state.loopChordCount, state.chords.length)));
+    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount), state.chords.length)));
     const sequence = visibleChords.map((chord, idx) => chordToEvent(chord, idx));
     const loopCount = 10;
     return {
@@ -792,21 +1003,19 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 async function playLoop() {
   try {
     stopPreview();
-    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(state.loopChordCount, state.chords.length)));
+    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount), state.chords.length)));
     visibleChords.forEach((chord, idx) => ensureChordComplete(chord, idx));
 
     const ctx = getPreviewContext();
     state.loopPreview.stop = false;
     const beatsPerBar = 4;
-    const barSeconds = (60 / Math.max(30, state.bpm)) * beatsPerBar;
+    const barDuration = (60 / Math.max(30, state.bpm)) * beatsPerBar;
     const rhythmValue = clampRhythmSpeed(state.rhythmSpeed);
     state.rhythmSpeed = rhythmValue;
-    const rhythmFactor = 0.75 + rhythmValue * 0.45;
-    const barDuration = barSeconds / rhythmFactor;
     const startTime = ctx.currentTime + 0.1;
     const loopCount = 10;
 
-    const chordDuration = Math.max(0.35, barDuration * 0.85);
+    const chordDuration = state.mode === 'rhythm' ? barDuration : Math.max(0.35, barDuration * 0.85);
     const totalBars = visibleChords.length * loopCount;
     for (let loopIndex = 0; loopIndex < loopCount; loopIndex += 1) {
       visibleChords.forEach((chord, idx) => {
@@ -815,7 +1024,7 @@ async function playLoop() {
       });
     }
 
-    const totalDuration = totalBars * barDuration + (state.synth.envelope.releaseMs || 0) / 1000;
+    const totalDuration = totalBars * barDuration + (state.mode === 'rhythm' ? 0.4 : (state.synth.envelope.releaseMs || 0) / 1000);
     state.loopPreview.timer = setTimeout(
       () => stopPreview('Loop preview finished'),
       (totalDuration + 0.3) * 1000,
@@ -931,7 +1140,7 @@ function savePatch() {
 function applyPatch(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid patch');
   const chords = Array.isArray(data.chords) ? data.chords.slice(0, state.chords.length) : [];
-  const loopChordCount = Math.max(1, Math.min(MAX_CHORDS, Number(data.loopChordCount || data.chords?.length || state.loopChordCount) || state.loopChordCount));
+  const loopChordCount = clampLoopChordCount(data.loopChordCount || data.chords?.length || state.loopChordCount);
   state.loopChordCount = loopChordCount;
   chords.forEach((entry, idx) => {
     if (!state.chords[idx]) return;
@@ -1014,6 +1223,7 @@ async function init() {
   attachControlListeners();
   syncSynthLabels();
   renderPresetOptions();
+  state.loopChordCount = clampLoopChordCount(state.loopChordCount);
   loopChordCountInput.value = state.loopChordCount;
   loopChord.checked = state.preview.loop;
   const res = await fetch(apiUrl('/api/tunings'));
