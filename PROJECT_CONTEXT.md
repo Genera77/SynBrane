@@ -1,17 +1,17 @@
 # SynBrane project context
 
 ## Overview
-SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The backend can talk to SuperCollider for real audio playback/rendering or fall back to a built-in Node DSP engine when SuperCollider is unavailable. Users browse tunings, pick roots and chord patterns in the **Explore** palette, sequence a simple 4-bar loop, audition it, and export WAV renders from the browser.
+SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The backend can talk to SuperCollider for real audio playback/rendering or fall back to a built-in Node DSP engine when SuperCollider is unavailable. Users browse tunings, pick roots and chord patterns in the **Explore** palette, design custom chords with up to seven notes (including octave offsets), sequence a simple 4-bar loop, audition it, and export WAV renders from the browser.
 
-Harmony mode now uses a synth-style voice: selectable waveforms (sine, saw, square), an ADSR envelope (attack/decay/sustain/release), and an optional low-pass filter with resonance. Rhythm mode now fires overtone-rich drum voices (fundamental + partials, optional noise, gentle saturation). All synth controls are exposed in the UI and forwarded to the backend for previews and renders.
+Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square), an ADSR envelope (attack/decay/sustain/release), and an optional low-pass filter with resonance. Rhythm mode now layers a four-on-the-floor kick and snares on beats 2/4 with overtone-rich drum voices mapped per chord note. All synth controls are exposed in the UI and forwarded to the backend for previews and renders.
 
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served by the backend.
   - Fetches tunings and per-tuning chord lists (with roots) from the API.
-  - **Explore palette:** tuning selection, root selection (12-TET note names for 12-EDO, numeric degrees otherwise), and chord browsing. Selecting a bar in the 4-bar sequencer highlights the destination; the Explore palette can assign the current tuning/root/chord to that bar via the “Use for Bar X” control.
-  - **Sequencer:** 4-bar grid where each bar can use its own tuning/root/chord; click a bar to mark it as the destination for Explore assignments.
-  - Global controls: mode (harmony vs rhythm), tempo (BPM), rhythm-speed mapping slider, and synth controls (waveform, ADSR envelope, low-pass cutoff/resonance).
+  - **Explore palette:** tuning selection, root selection (12-TET note names for 12-EDO, numeric degrees otherwise), chord browsing, and a **Custom Chord** editor with seven slots. Each slot can be toggled on/off, assigned to any degree in the active tuning, and shifted up or down by octaves. Selecting a bar in the 4-bar sequencer highlights the destination; the Explore palette can assign either a preset chord or the current Custom Chord to that bar via the “Use for Bar X” control.
+  - **Sequencer:** 4-bar grid where each bar can use its own tuning/root and choose between a preset chord or the shared Custom Chord; click a bar to mark it as the destination for Explore assignments. Custom chords carry their active notes (including octave shifts) into every bar that references them.
+  - Global controls: mode (harmony vs rhythm), expanded tempo slider (30–300 BPM), rhythm-speed multiplier slider (2.0–5.0 with fine steps), and synth controls (waveform, ADSR envelope, low-pass cutoff/resonance).
   - Calls `/api/play` to audition a single chord or the 4-bar loop and `/api/render` to render to WAV. A Web Audio preview mirrors the synth/rhythm design locally. Loop previews repeat until stopped or until 10 passes are reached.
 
 - **Backend** (`server/`)
@@ -25,7 +25,7 @@ Harmony mode now uses a synth-style voice: selectable waveforms (sine, saw, squa
 
 - **Audio engines** (`server/audio/`)
   - `supercolliderClient.js` — writes small SuperCollider scripts and executes them via `sclang`. Provides `playRealtime` and `renderToFile` using SynthDefs for harmony and overtone-rich rhythm mapping.
-  - `engine.js` — Node DSP fallback that synthesizes harmony voices with selectable waveforms, ADSR envelopes, and an optional resonant low-pass filter. Rhythm voices render drum-like hits with fundamentals, overtones, noise, and light saturation. It supports single-chord renders and multi-event 4-bar sequences, respecting BPM, rhythm-speed mapping, and synth parameters.
+  - `engine.js` — Node DSP fallback that synthesizes harmony voices with selectable waveforms, ADSR envelopes, and an optional resonant low-pass filter. Rhythm voices now layer a four-on-the-floor kick plus snares on beats 2 and 4, and map up to seven chord notes onto distinct tom/cymbal-style voices. It supports single-chord renders and multi-event 4-bar sequences, respecting BPM, rhythm-speed mapping, and synth parameters.
   - `index.js` — router that selects SuperCollider when `SUPER_COLLIDER_ENABLED=true`; otherwise uses the Node fallback. If SuperCollider execution fails, it automatically falls back to the Node path.
 
 ## Audio behavior
@@ -35,7 +35,9 @@ Harmony mode now uses a synth-style voice: selectable waveforms (sine, saw, squa
   - Optional resonant low-pass filter with adjustable cutoff and resonance to tame or brighten harmonics.
   - Loudness normalized around -4 dBFS so preview loudness and rendered WAVs align.
 - **Rhythm mode (Node DSP)**
-  - Drum-like hits with a low fundamental, multiple overtone partials, optional noise for attack, and soft saturation. Uses pitch→rate mapping via the rhythm-speed slider.
+  - Drum-like hits with a low fundamental, multiple overtone partials, optional noise for attack, and soft saturation. Uses pitch→rate mapping via the rhythm-speed slider (effective multiplier 2.0–5.0).
+  - Four-on-the-floor backbone: kick on every beat with snares on beats 2 and 4 across the loop duration.
+  - Note-mapped percussion for up to seven chord notes: floor/mid/high toms, closed/open hats, ride, and a metallic click.
 - **Browser preview** mirrors these designs: ADSR/filter for harmony, overtone-rich drum clicks for rhythm, so local audition matches renders.
 
 ## Tuning and chord presets
@@ -51,15 +53,15 @@ Harmony mode now uses a synth-style voice: selectable waveforms (sine, saw, squa
 - `GET /api/chords?tuningId=<id>`
   - Response: `{ chords: [{ id, label, degrees, name }], roots: [{ value, label }] }`
 - `POST /api/play` / `POST /api/render`
-  - Single chord payload: `{ tuningId, chord, root, mode, bpm, rhythmSpeed, synthSettings, loopCount? }`
-  - 4-bar sequence payload: `{ mode, bpm, rhythmSpeed, synthSettings, loopCount?, sequence: [{ bar, durationBars, tuningId, chord, root }] }`
+  - Single chord payload: `{ tuningId, chord, root, mode, bpm, rhythmSpeed, synthSettings, customChord?, frequencies?, loopCount? }` (customChord carries slots/degrees/frequencies for custom notes).
+  - 4-bar sequence payload: `{ mode, bpm, rhythmSpeed, synthSettings, loopCount?, sequence: [{ bar, durationBars, tuningId, chord, chordType, root, customChord?, frequencies? }] }`
   - Both endpoints accept `tuningType`/`tuningValue` for backwards compatibility.
   - `synthSettings` shape: `{ waveform, envelope: { attackMs, decayMs, sustainLevel, releaseMs }, filter: { cutoffHz, resonance } }` (all optional; defaults applied server-side).
 
 ## UI controls
-- Explore palette for tuning/root/chord selection; assign the selected chord to the highlighted bar via “Use for Bar X.”
-- Sequencer shows four bars; click any bar to select it for assignment. Mix tunings freely per bar.
-- Global controls: tempo, harmony vs rhythm mode, rhythm-speed mapping.
+- Explore palette for tuning/root/chord selection plus a seven-slot Custom Chord editor with octave offsets; assign the selected preset or the custom layout to the highlighted bar via “Use for Bar X.”
+- Sequencer shows four bars; click any bar to select it for assignment. Mix tunings freely per bar and toggle each bar between preset chords and the shared Custom Chord.
+- Global controls: tempo (30–300 BPM), harmony vs rhythm mode, rhythm-speed multiplier (2.0–5.0).
 - Synth controls (harmony): waveform, attack, decay, sustain level, release, low-pass cutoff, resonance.
 - Preview/render actions for a single chord or the full 4-bar loop. Loop playback repeats until you press Stop or until 10 passes have played.
 

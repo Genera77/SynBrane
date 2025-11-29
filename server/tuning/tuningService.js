@@ -93,10 +93,34 @@ function edoFrequency(baseFrequency, stepCount, degree) {
 
 function scalaFrequency(baseFrequency, intervals, degree) {
   if (!intervals.length) return baseFrequency;
-  const index = degree % intervals.length;
-  const octaves = Math.floor(degree / intervals.length);
-  const cents = intervals[index];
+  const span = intervals.length;
+  const wrappedIndex = ((degree % span) + span) % span;
+  const octaves = Math.floor(degree / span);
+  const cents = intervals[wrappedIndex];
   return baseFrequency * 2 ** octaves * 2 ** (cents / 1200);
+}
+
+function degreeSpanForTuning({ tuningType, tuningValue }) {
+  if (tuningType === 'edo') return tuningValue || 12;
+  if (tuningType === 'scala') {
+    const scales = loadScalaScales(config.scalesDir);
+    const selected = scales.find((scale) => scale.name === tuningValue);
+    if (selected) return selected.intervals?.length || selected.count || 12;
+  }
+  return 12;
+}
+
+function degreeToFrequencyValue({ tuningType, tuningValue, degree, baseFrequency }) {
+  if (tuningType === 'edo') {
+    return edoFrequency(baseFrequency, tuningValue, degree);
+  }
+  if (tuningType === 'scala') {
+    const scales = loadScalaScales(config.scalesDir);
+    const selected = scales.find((scale) => scale.name === tuningValue);
+    if (!selected) return baseFrequency;
+    return scalaFrequency(baseFrequency, selected.intervals, degree);
+  }
+  return baseFrequency;
 }
 
 function parseTuningId(tuningId, fallbackType, fallbackValue) {
@@ -184,19 +208,23 @@ function chordFrequencies({ tuningType, tuningValue, chord, root = 0, baseFreque
   const frequencies = [];
   if (!chord || !Array.isArray(chord.degrees)) return frequencies;
   const degrees = chord.degrees.map((degree) => degree + root);
-  if (tuningType === 'edo') {
-    degrees.forEach((degree) => {
-      frequencies.push(edoFrequency(baseFrequency, tuningValue, degree));
-    });
-  } else if (tuningType === 'scala') {
-    const scales = loadScalaScales(config.scalesDir);
-    const selected = scales.find((scale) => scale.name === tuningValue);
-    if (!selected) return frequencies;
-    degrees.forEach((degree) => {
-      frequencies.push(scalaFrequency(baseFrequency, selected.intervals, degree));
-    });
-  }
+  degrees.forEach((degree) => {
+    frequencies.push(degreeToFrequencyValue({ tuningType, tuningValue, degree, baseFrequency }));
+  });
   return frequencies;
+}
+
+function resolveCustomChordDegrees({ customChord, root = 0, tuningType, tuningValue, baseFrequency }) {
+  if (!customChord) return { degrees: [], frequencies: [], span: degreeSpanForTuning({ tuningType, tuningValue }) };
+  const providedDegrees = Array.isArray(customChord.degrees) && customChord.degrees.length
+    ? customChord.degrees.map((deg) => Number(deg))
+    : null;
+  const span = degreeSpanForTuning({ tuningType, tuningValue });
+  const slots = Array.isArray(customChord.slots) ? customChord.slots : customChord.notes || [];
+  const degrees = providedDegrees
+    || slots.filter((slot) => slot.enabled).map((slot) => Number(slot.degree || 0) + Number(root || 0) + span * Number(slot.octave || 0));
+  const frequencies = degrees.map((degree) => degreeToFrequencyValue({ tuningType, tuningValue, degree, baseFrequency }));
+  return { degrees, frequencies, span };
 }
 
 function chordsForEdo(tuningValue) {
@@ -221,4 +249,14 @@ function chordsForTuning({ tuningId, tuningType: rawType, tuningValue: rawValue 
   return { chords: [], roots: [] };
 }
 
-module.exports = { listTunings, chordsForTuning, chordFrequencies, parseTuningId, tuningRoots, NOTE_NAMES_12EDO };
+module.exports = {
+  listTunings,
+  chordsForTuning,
+  chordFrequencies,
+  parseTuningId,
+  tuningRoots,
+  NOTE_NAMES_12EDO,
+  degreeSpanForTuning,
+  degreeToFrequencyValue,
+  resolveCustomChordDegrees,
+};

@@ -31,8 +31,21 @@ function applyNormalization(samples, targetDb = -4) {
   return { gain, peak };
 }
 
+const RHYTHM_BASE_MAPPING = 0.005;
+
+const DRUM_VOICES = [
+  { baseFrequency: 70, decay: 0.28, noiseMix: 0.12, partials: [1, 1.7, 2.2, 3.1], saturation: 0.8, amplitude: 0.95 },
+  { baseFrequency: 105, decay: 0.22, noiseMix: 0.1, partials: [1, 1.9, 2.6, 3.6], saturation: 0.8, amplitude: 0.85 },
+  { baseFrequency: 150, decay: 0.18, noiseMix: 0.14, partials: [1, 2.3, 3.3, 4.6], saturation: 0.8, amplitude: 0.8 },
+  { baseFrequency: 320, decay: 0.08, noiseMix: 0.55, partials: [2, 5, 7, 11], saturation: 0.9, amplitude: 0.7 },
+  { baseFrequency: 320, decay: 0.18, noiseMix: 0.6, partials: [3, 7, 10, 14], saturation: 0.95, amplitude: 0.75 },
+  { baseFrequency: 380, decay: 0.22, noiseMix: 0.45, partials: [3, 7, 11, 15], saturation: 0.85, amplitude: 0.7 },
+  { baseFrequency: 520, decay: 0.06, noiseMix: 0.35, partials: [5, 9, 13, 17], saturation: 0.9, amplitude: 0.6 },
+];
+
 function mapFrequenciesToRhythm(frequencies, mappingFactor) {
-  return frequencies.map((freq) => Math.max(0.5, freq * mappingFactor));
+  const multiplier = Math.max(0.5, Number(mappingFactor) || 3);
+  return frequencies.map((freq) => Math.max(0.5, freq * RHYTHM_BASE_MAPPING * multiplier));
 }
 
 function clamp(value, min, max) {
@@ -121,31 +134,60 @@ function applyLowPassFilter(samples, sampleRate, cutoffHz, resonance = 0.2) {
   }
 }
 
-function generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor, synthSettings }) {
+function addBackboneHits(samples, startSample, sampleRate, durationSeconds, bpm) {
+  const secondsPerBeat = 60 / bpm;
+  const totalBeats = Math.ceil(durationSeconds / secondsPerBeat);
+  for (let beat = 0; beat < totalBeats; beat += 1) {
+    const hitSample = startSample + Math.floor(beat * secondsPerBeat * sampleRate);
+    addPercussiveHit(samples, hitSample, sampleRate, {
+      amplitude: 1,
+      attack: 0.003,
+      decay: 0.26,
+      baseFrequency: 55,
+      partials: [1, 2.1, 2.9],
+      noiseMix: 0.08,
+      saturation: 0.9,
+    });
+    if (beat % 4 === 1 || beat % 4 === 3) {
+      addPercussiveHit(samples, hitSample, sampleRate, {
+        amplitude: 0.8,
+        attack: 0.002,
+        decay: 0.18,
+        baseFrequency: 180,
+        partials: [1.5, 2.5, 3.5, 4.5],
+        noiseMix: 0.6,
+        saturation: 0.9,
+      });
+    }
+  }
+}
+
+function addRhythmVoices(samples, startSample, sampleRate, durationSeconds, frequencies, mappingFactor) {
+  const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 3);
+  const durationSamples = Math.floor(durationSeconds * sampleRate);
+  rates.forEach((rate, index) => {
+    const intervalSamples = Math.max(1, Math.floor(sampleRate / rate));
+    const voice = DRUM_VOICES[index] || DRUM_VOICES[DRUM_VOICES.length - 1];
+    for (let offset = 0; offset < durationSamples; offset += intervalSamples) {
+      addPercussiveHit(samples, startSample + offset, sampleRate, {
+        amplitude: voice.amplitude || 0.6,
+        attack: voice.attack ?? 0.004,
+        decay: voice.decay ?? 0.12,
+        baseFrequency: voice.baseFrequency ?? Math.max(40, Math.min((frequencies[index] || 80) * 0.5, 260)),
+        partials: voice.partials,
+        noiseMix: voice.noiseMix ?? 0.35,
+        saturation: voice.saturation ?? 0.85,
+      });
+    }
+  });
+}
+
+function generateChordSamples({ mode, frequencies = [], duration, sampleRate, mappingFactor, synthSettings, bpm = 120 }) {
   if (mode === 'rhythm') {
     const totalSamples = Math.floor(sampleRate * duration);
     const samples = new Float32Array(totalSamples);
-    const rates = mapFrequenciesToRhythm(frequencies, mappingFactor || 0.01);
-    rates.forEach((rate, index) => {
-      const intervalSeconds = 1 / rate;
-      const voiceIsKick = index === 0;
-      const baseFrequency = Math.max(40, Math.min(frequencies[index] * 0.5, 260));
-      const partials = [1, 2, 3, 4];
-      const decay = voiceIsKick ? 0.22 : 0.12;
-      const noiseMix = voiceIsKick ? 0.2 : 0.35;
-      for (let t = 0; t < duration; t += intervalSeconds) {
-        const startSample = Math.floor(t * sampleRate);
-        addPercussiveHit(samples, startSample, sampleRate, {
-          amplitude: 1 / (index + 1),
-          attack: 0.004,
-          decay,
-          baseFrequency,
-          partials,
-          noiseMix,
-          saturation: 0.85,
-        });
-      }
-    });
+    addBackboneHits(samples, 0, sampleRate, duration, bpm);
+    addRhythmVoices(samples, 0, sampleRate, duration, frequencies, mappingFactor);
     return samples;
   }
 
@@ -229,7 +271,15 @@ function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor,
     const startTime = barDuration * (event.bar || 0);
     const duration = barDuration * (event.durationBars || 1);
     const startSample = Math.floor(startTime * sampleRate);
-    const buffer = generateChordSamples({ mode, frequencies: event.frequencies, duration, sampleRate, mappingFactor, synthSettings: normalizedSynth || synthSettings });
+    const buffer = generateChordSamples({
+      mode,
+      frequencies: event.frequencies || [],
+      duration,
+      sampleRate,
+      mappingFactor,
+      synthSettings: normalizedSynth || synthSettings,
+      bpm,
+    });
     const copyLength = Math.min(buffer.length, samples.length - startSample);
     for (let i = 0; i < copyLength; i += 1) {
       samples[startSample + i] += buffer[i];
@@ -272,7 +322,15 @@ function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed,
   if (Array.isArray(events) && events.length) {
     samples = generateSequenceSamples({ mode, events, bpm: bpm || 120, sampleRate, mappingFactor: effectiveMapping, synthSettings });
   } else {
-    samples = generateChordSamples({ mode, frequencies, duration, sampleRate, mappingFactor: effectiveMapping, synthSettings });
+    samples = generateChordSamples({
+      mode,
+      frequencies,
+      duration,
+      sampleRate,
+      mappingFactor: effectiveMapping,
+      synthSettings,
+      bpm: bpm || 120,
+    });
   }
   applyNormalization(samples);
   const wav = encodeWav(samples, sampleRate);

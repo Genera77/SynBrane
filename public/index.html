@@ -22,9 +22,25 @@
           <select id="rootSelect"></select>
         </label>
         <p class="meta" id="selectedBarLabel">Selected Bar: 1</p>
-        <p class="meta">Choose a chord pattern below and use the button to assign it to the highlighted bar. Degrees are relative to the root degree.</p>
+        <p class="meta">Choose a chord pattern below or design a custom chord. Assign your choice to the highlighted bar. Degrees are relative to the root degree.</p>
         <div id="tuningMeta" class="meta"></div>
+        <label>Chord source
+          <select id="chordSource">
+            <option value="preset">Preset chord list</option>
+            <option value="custom">Custom chord</option>
+          </select>
+        </label>
         <div id="chordList"></div>
+        <div class="custom-chord-panel">
+          <div class="custom-chord-header">
+            <div>
+              <h3>Custom Chord</h3>
+              <p class="meta">Up to 7 notes from the active tuning. Enable slots, pick degrees, and nudge octaves up/down.</p>
+            </div>
+            <div class="custom-chord-summary" id="customChordSummary"></div>
+          </div>
+          <div id="customChordEditor" class="custom-chord"></div>
+        </div>
         <div class="actions">
           <button id="assignChordBtn" class="secondary">Use for Bar 1</button>
         </div>
@@ -46,12 +62,12 @@
             </select>
           </label>
           <label>Tempo (BPM)
-            <input id="bpm" type="range" min="40" max="240" value="120" />
+            <input id="bpm" type="range" min="30" max="300" value="120" step="1" />
             <span class="meta" id="bpmLabel">120 BPM</span>
           </label>
           <label>Rhythm speed / mapping
-            <input id="rhythmSpeed" type="range" min="0.001" max="0.05" step="0.001" value="0.01" />
-            <span class="meta" id="rhythmLabel">0.010× pitch → beat</span>
+            <input id="rhythmSpeed" type="range" min="2" max="5" step="0.05" value="3" />
+            <span class="meta" id="rhythmLabel">3.00× pitch → beat</span>
           </label>
         </div>
         <h3>Synth voice (harmony)</h3>

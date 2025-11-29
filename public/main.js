@@ -1,6 +1,7 @@
 const chordList = document.getElementById('chordList');
 const tuningSelect = document.getElementById('tuningSelect');
 const rootSelect = document.getElementById('rootSelect');
+const chordSourceSelect = document.getElementById('chordSource');
 const modeSelect = document.getElementById('modeSelect');
 const bpmInput = document.getElementById('bpm');
 const bpmLabel = document.getElementById('bpmLabel');
@@ -26,6 +27,8 @@ const resonanceLabel = document.getElementById('resonanceLabel');
 const selectedBarLabel = document.getElementById('selectedBarLabel');
 const assignChordBtn = document.getElementById('assignChordBtn');
 const stopLoopBtn = document.getElementById('stopLoopBtn');
+const customChordEditor = document.getElementById('customChordEditor');
+const customChordSummary = document.getElementById('customChordSummary');
 
 const state = {
   tunings: [],
@@ -34,11 +37,19 @@ const state = {
   selectedTuningId: null,
   selectedChordId: null,
   selectedRoot: 0,
+  chordSource: 'preset',
   bars: [],
   selectedBar: 0,
   mode: 'harmony',
   bpm: 120,
-  rhythmSpeed: 0.01,
+  rhythmSpeed: 3,
+  customChord: {
+    slots: Array.from({ length: 7 }, (_, index) => ({
+      enabled: index === 0,
+      degree: 0,
+      octave: 0,
+    })),
+  },
   synth: {
     waveform: 'saw',
     envelope: {
@@ -81,14 +92,156 @@ function getChord(tuningId, chordId) {
   return cache.chords.find((chord) => chord.id === chordId);
 }
 
+function getDegreeSpan(tuning) {
+  if (!tuning) return 12;
+  if (tuning.type === 'edo') return tuning.value || 12;
+  return tuning.intervals?.length || tuning.count || 12;
+}
+
+function degreeLabel(tuning, degree) {
+  if (tuning?.type === 'edo' && tuning.value === 12) {
+    const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    return names[degree % 12];
+  }
+  return `deg ${degree}`;
+}
+
+function cloneCustomChordSlots(slots = state.customChord.slots) {
+  return slots.map((slot) => ({ ...slot }));
+}
+
+function resolveCustomChord(tuningId, root, customChord = state.customChord) {
+  const tuning = getTuning(tuningId);
+  const span = getDegreeSpan(tuning);
+  const activeSlots = (customChord?.slots || []).filter((slot) => slot.enabled);
+  const degrees = activeSlots.map((slot) => Number(slot.degree || 0) + Number(root || 0) + span * Number(slot.octave || 0));
+  const frequencies = degrees.map((degree) => degreeToFrequency(tuningId, degree));
+  return { degrees, frequencies, activeSlots, span, tuning };
+}
+
+function updateCustomChordSummary() {
+  if (!customChordSummary) return;
+  const { activeSlots, tuning } = resolveCustomChord(state.selectedTuningId, state.selectedRoot);
+  if (!activeSlots.length) {
+    customChordSummary.textContent = 'No active notes';
+    return;
+  }
+  const span = getDegreeSpan(tuning || getTuning(state.selectedTuningId));
+  const items = activeSlots.map((slot) => {
+    const baseLabel = degreeLabel(tuning, Number(slot.degree || 0));
+    const octaveText = slot.octave === 0 ? '' : `${slot.octave > 0 ? '+' : ''}${slot.octave} oct`;
+    const degValue = Number(slot.degree || 0) + span * Number(slot.octave || 0);
+    return `${baseLabel}${octaveText ? ` (${octaveText})` : ''} → deg ${degValue}`;
+  });
+  customChordSummary.innerHTML = `<strong>${items.length} note${items.length === 1 ? '' : 's'}</strong><br />${items.join('<br />')}`;
+  if (state.bars.some((bar) => (bar.chordType || 'preset') === 'custom')) {
+    renderBars();
+  }
+}
+
+function renderCustomChordEditor() {
+  if (!customChordEditor) return;
+  const tuning = getTuning(state.selectedTuningId);
+  const span = getDegreeSpan(tuning);
+  const degreeOptions = Array.from({ length: span }, (_, index) => index);
+  customChordEditor.innerHTML = '';
+
+  cloneCustomChordSlots().forEach((slot, index) => {
+    const slotEl = document.createElement('div');
+    slotEl.className = 'custom-slot';
+
+    const header = document.createElement('header');
+    const title = document.createElement('span');
+    title.textContent = `Slot ${index + 1}`;
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.checked = slot.enabled;
+    const noteLabel = document.createElement('div');
+    noteLabel.className = 'note-label';
+    const slotLabelUpdate = () => {
+      const slotState = state.customChord.slots[index];
+      const slotInfo = resolveCustomChord(state.selectedTuningId, state.selectedRoot, { slots: [{ ...slotState, enabled: slotState.enabled }] });
+      const freq = slotInfo.frequencies[0];
+      const baseLabel = degreeLabel(tuning, Number(slotState.degree || 0));
+      const octaveText = slotState.octave === 0 ? '' : `${slotState.octave > 0 ? '+' : ''}${slotState.octave} oct`;
+      if (slotState.enabled && Number.isFinite(freq)) {
+        noteLabel.textContent = `${baseLabel}${octaveText ? ` (${octaveText})` : ''} ≈ ${freq.toFixed(2)} Hz`;
+      } else {
+        noteLabel.textContent = 'Disabled';
+      }
+    };
+    toggle.onchange = (e) => {
+      state.customChord.slots[index].enabled = e.target.checked;
+      slotLabelUpdate();
+      updateCustomChordSummary();
+    };
+    header.appendChild(title);
+    header.appendChild(toggle);
+    slotEl.appendChild(header);
+
+    const controls = document.createElement('div');
+    controls.className = 'slot-controls';
+
+    const degreeLabelEl = document.createElement('label');
+    degreeLabelEl.textContent = 'Degree';
+    const degreeSelect = document.createElement('select');
+    degreeOptions.forEach((deg) => {
+      const option = document.createElement('option');
+      option.value = deg;
+      option.textContent = `${degreeLabel(tuning, deg)} (${deg})`;
+      degreeSelect.appendChild(option);
+    });
+    degreeSelect.value = slot.degree;
+    degreeSelect.onchange = (e) => {
+      state.customChord.slots[index].degree = Number(e.target.value);
+      slotLabelUpdate();
+      updateCustomChordSummary();
+    };
+    degreeLabelEl.appendChild(degreeSelect);
+    controls.appendChild(degreeLabelEl);
+
+    const octaveLabel = document.createElement('label');
+    octaveLabel.textContent = 'Octave offset';
+    const octaveSelect = document.createElement('select');
+    [-2, -1, 0, 1, 2].forEach((oct) => {
+      const option = document.createElement('option');
+      option.value = oct;
+      option.textContent = `${oct > 0 ? '+' : ''}${oct}`;
+      octaveSelect.appendChild(option);
+    });
+    octaveSelect.value = slot.octave;
+    octaveSelect.onchange = (e) => {
+      state.customChord.slots[index].octave = Number(e.target.value);
+      slotLabelUpdate();
+      updateCustomChordSummary();
+    };
+    octaveLabel.appendChild(octaveSelect);
+    controls.appendChild(octaveLabel);
+
+    slotLabelUpdate();
+
+    slotEl.appendChild(controls);
+    slotEl.appendChild(noteLabel);
+    customChordEditor.appendChild(slotEl);
+  });
+
+  updateCustomChordSummary();
+}
+
+function hasActiveCustomNotes() {
+  const { activeSlots } = resolveCustomChord(state.selectedTuningId, state.selectedRoot);
+  return activeSlots.length > 0;
+}
+
 function updateSelectedBarLabel() {
   const barNumber = state.selectedBar + 1;
   if (selectedBarLabel) {
     selectedBarLabel.textContent = `Selected Bar: ${barNumber}`;
   }
   if (assignChordBtn) {
-    assignChordBtn.textContent = `Use for Bar ${barNumber}`;
-    assignChordBtn.disabled = !state.selectedChordId;
+    const sourceLabel = state.chordSource === 'custom' ? 'Custom chord' : 'Preset chord';
+    assignChordBtn.textContent = `Use ${sourceLabel} for Bar ${barNumber}`;
+    assignChordBtn.disabled = state.chordSource === 'preset' ? !state.selectedChordId : !hasActiveCustomNotes();
   }
 }
 
@@ -125,6 +278,7 @@ async function fetchTunings() {
     renderTunings();
     renderRoots();
     renderChords();
+    renderCustomChordEditor();
     renderBars();
     updateSelectedBarLabel();
   }
@@ -146,6 +300,7 @@ function seedSelections() {
     tuningId: state.selectedTuningId,
     root: state.selectedRoot,
     chordId: state.selectedChordId,
+    chordType: 'preset',
   }));
   state.selectedBar = 0;
 }
@@ -208,22 +363,38 @@ function renderChords() {
 }
 
 function assignChordToSelectedBar() {
-  const chord = getChord(state.selectedTuningId, state.selectedChordId);
-  if (!chord) {
-    updateStatus('Pick a chord in Explore first.');
-    return;
-  }
   const barIndex = state.selectedBar;
   const current = state.bars[barIndex];
-  state.bars[barIndex] = {
-    ...current,
-    tuningId: state.selectedTuningId,
-    root: Number(state.selectedRoot || 0),
-    chordId: state.selectedChordId,
-  };
+  if (state.chordSource === 'custom') {
+    if (!hasActiveCustomNotes()) {
+      updateStatus('Enable at least one custom chord slot first.');
+      return;
+    }
+    state.bars[barIndex] = {
+      ...current,
+      tuningId: state.selectedTuningId,
+      root: Number(state.selectedRoot || 0),
+      chordId: null,
+      chordType: 'custom',
+    };
+    updateStatus(`Assigned custom chord to bar ${barIndex + 1}.`);
+  } else {
+    const chord = getChord(state.selectedTuningId, state.selectedChordId);
+    if (!chord) {
+      updateStatus('Pick a chord in Explore first.');
+      return;
+    }
+    state.bars[barIndex] = {
+      ...current,
+      tuningId: state.selectedTuningId,
+      root: Number(state.selectedRoot || 0),
+      chordId: state.selectedChordId,
+      chordType: 'preset',
+    };
+    updateStatus(`Assigned ${chord.label || chord.name} to bar ${barIndex + 1}.`);
+  }
   renderBars();
   updateSelectedBarLabel();
-  updateStatus(`Assigned ${chord.label || chord.name} to bar ${barIndex + 1}.`);
 }
 
 function renderBars() {
@@ -260,6 +431,7 @@ function renderBars() {
         tuningId: e.target.value,
         root: cache.roots[0]?.value || 0,
         chordId: cache.chords[0]?.id || null,
+        chordType: bar.chordType || 'preset',
       };
       renderBars();
       updateSelectedBarLabel();
@@ -281,27 +453,61 @@ function renderBars() {
     rootSelectEl.onchange = (e) => {
       const current = state.bars[bar.bar];
       state.bars[bar.bar] = { ...current, root: Number(e.target.value) };
+      renderBars();
     };
     rootLabel.appendChild(rootSelectEl);
     card.appendChild(rootLabel);
 
-    const chordLabel = document.createElement('label');
-    chordLabel.textContent = 'Chord';
-    const chordSelectEl = document.createElement('select');
-    const chordOptions = state.chordsByTuning[bar.tuningId]?.chords || [];
-    chordOptions.forEach((chord) => {
+    const chordTypeLabel = document.createElement('label');
+    chordTypeLabel.textContent = 'Chord source';
+    const chordTypeSelect = document.createElement('select');
+    ['preset', 'custom'].forEach((type) => {
       const option = document.createElement('option');
-      option.value = chord.id;
-      option.textContent = `${chord.label || chord.name}`;
-      chordSelectEl.appendChild(option);
+      option.value = type;
+      option.textContent = type === 'custom' ? 'Custom chord' : 'Preset';
+      chordTypeSelect.appendChild(option);
     });
-    chordSelectEl.value = bar.chordId;
-    chordSelectEl.onchange = (e) => {
+    chordTypeSelect.value = bar.chordType || 'preset';
+    chordTypeSelect.onchange = (e) => {
       const current = state.bars[bar.bar];
-      state.bars[bar.bar] = { ...current, chordId: e.target.value };
+      const next = { ...current, chordType: e.target.value };
+      if (e.target.value === 'preset' && !next.chordId) {
+        const firstChord = (state.chordsByTuning[next.tuningId]?.chords || [])[0];
+        next.chordId = firstChord?.id || null;
+      }
+      state.bars[bar.bar] = next;
+      renderBars();
     };
-    chordLabel.appendChild(chordSelectEl);
-    card.appendChild(chordLabel);
+    chordTypeLabel.appendChild(chordTypeSelect);
+    card.appendChild(chordTypeLabel);
+
+    if ((bar.chordType || 'preset') === 'custom') {
+      const customMeta = document.createElement('div');
+      customMeta.className = 'meta';
+      const active = resolveCustomChord(bar.tuningId, bar.root);
+      customMeta.textContent = active.degrees.length
+        ? `Using custom chord (${active.degrees.length} notes).`
+        : 'Custom chord has no active notes.';
+      card.appendChild(customMeta);
+    } else {
+      const chordLabel = document.createElement('label');
+      chordLabel.textContent = 'Chord';
+      const chordSelectEl = document.createElement('select');
+      const chordOptions = state.chordsByTuning[bar.tuningId]?.chords || [];
+      chordOptions.forEach((chord) => {
+        const option = document.createElement('option');
+        option.value = chord.id;
+        option.textContent = `${chord.label || chord.name}`;
+        chordSelectEl.appendChild(option);
+      });
+      chordSelectEl.value = bar.chordId;
+      chordSelectEl.onchange = (e) => {
+        const current = state.bars[bar.bar];
+        state.bars[bar.bar] = { ...current, chordId: e.target.value };
+      };
+      chordLabel.appendChild(chordSelectEl);
+      card.appendChild(chordLabel);
+    }
 
     barsContainer.appendChild(card);
   });
@@ -314,14 +520,20 @@ function degreeToFrequency(tuningId, degree) {
     return state.baseFrequency * 2 ** (degree / tuning.value);
   }
   const intervals = tuning.intervals || [];
-  const index = degree % intervals.length;
-  const octaves = Math.floor(degree / intervals.length);
-  const cents = intervals[index] || 0;
+  const span = intervals.length || 1;
+  const wrappedIndex = ((degree % span) + span) % span;
+  const octaves = Math.floor(degree / span);
+  const cents = intervals[wrappedIndex] || 0;
   return state.baseFrequency * 2 ** octaves * 2 ** (cents / 1200);
 }
 
 function frequenciesForEvent(event) {
-  const chord = getChord(event.tuningId, event.chordId);
+  if (Array.isArray(event.frequencies) && event.frequencies.length) return event.frequencies;
+  if (event.chordType === 'custom' || event.customChord) {
+    const resolved = resolveCustomChord(event.tuningId, event.root, event.customChord || state.customChord);
+    return resolved.frequencies;
+  }
+  const chord = event.chord || getChord(event.tuningId, event.chordId);
   if (!chord) return [];
   return chord.degrees.map((degree) => degreeToFrequency(event.tuningId, degree + Number(event.root || 0)));
 }
@@ -389,6 +601,70 @@ function createPercussiveHit(ctx, startTime, {
   mixBus.connect(shaper).connect(gain).connect(ctx.destination);
 }
 
+const RHYTHM_BASE_MAPPING = 0.005;
+
+function rhythmRateForFrequency(freq) {
+  return Math.max(0.5, freq * RHYTHM_BASE_MAPPING * state.rhythmSpeed);
+}
+
+const DRUM_VOICES = [
+  { baseFrequency: 70, decay: 0.28, noiseMix: 0.12, partials: [1, 1.7, 2.2, 3.1], saturation: 0.8, amplitude: 0.95 },
+  { baseFrequency: 105, decay: 0.22, noiseMix: 0.1, partials: [1, 1.9, 2.6, 3.6], saturation: 0.8, amplitude: 0.85 },
+  { baseFrequency: 150, decay: 0.18, noiseMix: 0.14, partials: [1, 2.3, 3.3, 4.6], saturation: 0.8, amplitude: 0.8 },
+  { baseFrequency: 320, decay: 0.08, noiseMix: 0.55, partials: [2, 5, 7, 11], saturation: 0.9, amplitude: 0.7 },
+  { baseFrequency: 320, decay: 0.18, noiseMix: 0.6, partials: [3, 7, 10, 14], saturation: 0.95, amplitude: 0.75 },
+  { baseFrequency: 380, decay: 0.22, noiseMix: 0.45, partials: [3, 7, 11, 15], saturation: 0.85, amplitude: 0.7 },
+  { baseFrequency: 520, decay: 0.06, noiseMix: 0.35, partials: [5, 9, 13, 17], saturation: 0.9, amplitude: 0.6 },
+];
+
+function scheduleBackbone(ctx, startTime, duration) {
+  const secondsPerBeat = 60 / state.bpm;
+  const totalBeats = Math.ceil(duration / secondsPerBeat);
+  for (let beat = 0; beat < totalBeats; beat += 1) {
+    const hitTime = startTime + beat * secondsPerBeat;
+    createPercussiveHit(ctx, hitTime, {
+      amplitude: 1,
+      attack: 0.003,
+      decay: 0.26,
+      baseFrequency: 55,
+      partials: [1, 2.1, 2.9],
+      noiseMix: 0.08,
+      saturation: 0.9,
+    });
+    if (beat % 4 === 1 || beat % 4 === 3) {
+      createPercussiveHit(ctx, hitTime, {
+        amplitude: 0.8,
+        attack: 0.002,
+        decay: 0.18,
+        baseFrequency: 180,
+        partials: [1.5, 2.5, 3.5, 4.5],
+        noiseMix: 0.6,
+        saturation: 0.9,
+      });
+    }
+  }
+}
+
+function scheduleRhythm(ctx, startTime, duration, freqs) {
+  scheduleBackbone(ctx, startTime, duration);
+  freqs.forEach((freq, index) => {
+    const rate = rhythmRateForFrequency(freq || 80);
+    const interval = 1 / rate;
+    const voice = DRUM_VOICES[index] || DRUM_VOICES[DRUM_VOICES.length - 1];
+    for (let t = 0; t < duration; t += interval) {
+      createPercussiveHit(ctx, startTime + t, {
+        amplitude: voice.amplitude || 0.6,
+        attack: voice.attack ?? 0.004,
+        decay: voice.decay ?? 0.12,
+        baseFrequency: voice.baseFrequency ?? Math.max(40, Math.min((freq || 80) * 0.5, 260)),
+        partials: voice.partials,
+        noiseMix: voice.noiseMix ?? 0.35,
+        saturation: voice.saturation ?? 0.85,
+      });
+    }
+  });
+}
+
 function scheduleHarmony(ctx, startTime, duration, freqs, synthSettings) {
   const synth = synthSettings || state.synth;
   const amp = 0.5 / Math.max(freqs.length, 1);
@@ -425,29 +701,6 @@ function scheduleHarmony(ctx, startTime, duration, freqs, synthSettings) {
     const stopTime = startTime + attack + decay + sustainTime + release + 0.05;
     osc.start(startTime);
     osc.stop(stopTime);
-  });
-}
-
-function scheduleRhythm(ctx, startTime, duration, freqs) {
-  const baseAmp = 0.75;
-  freqs.forEach((freq, index) => {
-    const rate = Math.max(0.5, freq * state.rhythmSpeed);
-    const interval = 1 / rate;
-    const baseFrequency = Math.max(40, Math.min((freq || 80) * 0.5, 260));
-    const partials = [1, 2, 3, 4];
-    const decay = index === 0 ? 0.2 : 0.12;
-    const noiseMix = index === 0 ? 0.2 : 0.35;
-    for (let t = 0; t < duration; t += interval) {
-      createPercussiveHit(ctx, startTime + t, {
-        amplitude: baseAmp / (index + 1),
-        attack: 0.004,
-        decay,
-        baseFrequency,
-        partials,
-        noiseMix,
-        saturation: 0.85,
-      });
-    }
   });
 }
 
@@ -519,13 +772,39 @@ function playLoopPreview(events) {
   queuePass(0);
 }
 
+function buildCustomChordEvent(tuningId, root) {
+  const resolved = resolveCustomChord(tuningId, root);
+  return {
+    tuningId,
+    chordType: 'custom',
+    root: Number(root || 0),
+    chord: { id: 'custom', name: 'Custom chord', degrees: resolved.degrees },
+    customChord: { slots: cloneCustomChordSlots(), degrees: resolved.degrees },
+    frequencies: resolved.frequencies,
+  };
+}
+
 function buildChordPayload() {
+  if (state.chordSource === 'custom') {
+    if (!hasActiveCustomNotes()) return null;
+    const custom = buildCustomChordEvent(state.selectedTuningId, state.selectedRoot);
+    return {
+      ...custom,
+      mode: state.mode,
+      bpm: state.bpm,
+      rhythmSpeed: state.rhythmSpeed,
+      synthSettings: state.synth,
+    };
+  }
   const chord = getChord(state.selectedTuningId, state.selectedChordId);
   if (!chord) return null;
   return {
     tuningId: state.selectedTuningId,
     chord,
+    chordId: state.selectedChordId,
+    chordType: 'preset',
     root: Number(state.selectedRoot || 0),
+    frequencies: chord.degrees.map((degree) => degreeToFrequency(state.selectedTuningId, degree + Number(state.selectedRoot || 0))),
     mode: state.mode,
     bpm: state.bpm,
     rhythmSpeed: state.rhythmSpeed,
@@ -534,14 +813,28 @@ function buildChordPayload() {
 }
 
 function buildLoopPayload() {
-  const sequence = state.bars.map((bar) => ({
-    bar: bar.bar,
-    durationBars: 1,
-    tuningId: bar.tuningId,
-    chord: getChord(bar.tuningId, bar.chordId),
-    chordId: bar.chordId,
-    root: Number(bar.root || 0),
-  })).filter((item) => item.chord);
+  const sequence = state.bars
+    .map((bar) => {
+      const base = {
+        bar: bar.bar,
+        durationBars: 1,
+        tuningId: bar.tuningId,
+        root: Number(bar.root || 0),
+      };
+      if ((bar.chordType || 'preset') === 'custom') {
+        return { ...base, ...buildCustomChordEvent(bar.tuningId, bar.root) };
+      }
+      const chord = getChord(bar.tuningId, bar.chordId);
+      if (!chord) return null;
+      return {
+        ...base,
+        chordType: 'preset',
+        chord,
+        chordId: bar.chordId,
+        frequencies: chord.degrees.map((degree) => degreeToFrequency(bar.tuningId, degree + Number(bar.root || 0))),
+      };
+    })
+    .filter(Boolean);
   return {
     mode: state.mode,
     bpm: state.bpm,
@@ -561,7 +854,17 @@ async function playChord() {
   stopLoopPreview();
   updateStatus('Scheduling chord…');
   await fetch('/api/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  playChordPreview({ tuningId: payload.tuningId, chordId: payload.chord.id, root: payload.root, bar: 0, durationBars: 1 });
+  playChordPreview({
+    tuningId: payload.tuningId,
+    chordId: payload.chordId || payload.chord?.id,
+    chord: payload.chord,
+    chordType: payload.chordType,
+    customChord: payload.customChord,
+    root: payload.root,
+    bar: 0,
+    durationBars: 1,
+    frequencies: payload.frequencies,
+  });
   updateStatus('Chord scheduled. Preview playing locally.');
 }
 
@@ -621,12 +924,20 @@ function hookEvents() {
     await ensureChords(state.selectedTuningId);
     renderRoots();
     renderChords();
+    renderCustomChordEditor();
     updateTuningMeta();
     updateSelectedBarLabel();
   };
 
   rootSelect.onchange = (e) => {
     state.selectedRoot = Number(e.target.value);
+    updateCustomChordSummary();
+    renderCustomChordEditor();
+  };
+
+  chordSourceSelect.onchange = (e) => {
+    state.chordSource = e.target.value;
+    updateSelectedBarLabel();
   };
 
   modeSelect.onchange = (e) => {
@@ -640,7 +951,7 @@ function hookEvents() {
 
   rhythmSpeedInput.oninput = (e) => {
     state.rhythmSpeed = Number(e.target.value);
-    rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(3)}× pitch → beat`;
+    rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(2)}× pitch → beat`;
   };
 
   waveformSelect.onchange = (e) => {
@@ -688,6 +999,9 @@ function hookEvents() {
 function init() {
   hookEvents();
   syncSynthControls();
+  bpmLabel.textContent = `${state.bpm} BPM`;
+  rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(2)}× pitch → beat`;
+  chordSourceSelect.value = state.chordSource;
   updateSelectedBarLabel();
   fetchTunings();
   updateStatus('Loading tunings…');
