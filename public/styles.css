@@ -26,6 +26,16 @@ header {
   position: relative;
 }
 
+.header-subtitle {
+  margin: 6px 0 0 0;
+}
+
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
 .header-inner {
   position: relative;
   display: flex;
@@ -39,9 +49,6 @@ h1 {
 }
 
 .about-trigger {
-  position: absolute;
-  top: 2px;
-  right: 0;
   padding: 6px 10px;
   background: #131822;
   color: var(--subtle);
