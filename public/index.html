@@ -3,58 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SynBrane Lab</title>
+    <title>SynBrane</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header>
       <h1>SynBrane</h1>
-      <p>Explore tunings, audition chords with roots, and stitch a 4-bar loop for harmony or rhythm playback.</p>
+      <p class="meta">Four-chord loop editor with quick synth controls.</p>
     </header>
     <main>
-      <section class="panel">
-        <h2>Explore</h2>
-        <p class="meta">Tuning + chord palette. Pick a temperament, choose a root, browse chords, then send your choice to the selected bar in the sequencer.</p>
-        <label>Tuning
-          <select id="tuningSelect"></select>
-        </label>
-        <label>Root note
-          <select id="rootSelect"></select>
-        </label>
-        <p class="meta" id="selectedBarLabel">Selected Bar: 1</p>
-        <p class="meta">Choose a chord pattern below or design a custom chord. Assign your choice to the highlighted bar. Degrees are relative to the root degree.</p>
-        <div id="tuningMeta" class="meta"></div>
-        <label>Chord source
-          <select id="chordSource">
-            <option value="preset">Preset chord list</option>
-            <option value="custom">Custom chord</option>
-          </select>
-        </label>
-        <div id="chordList"></div>
-        <div class="custom-chord-panel">
-          <div class="custom-chord-header">
-            <div>
-              <h3>Custom Chord</h3>
-              <p class="meta">Up to 7 notes from the active tuning. Enable slots, pick degrees, and nudge octaves up/down.</p>
-            </div>
-            <div class="custom-chord-summary" id="customChordSummary"></div>
+      <section class="panel" id="chordsPanel">
+        <div class="panel-header">
+          <h2>Chords</h2>
+          <div class="chord-switcher" id="chordSwitcher"></div>
+        </div>
+        <div class="active-chord-label" id="activeChordLabel">Chord 1</div>
+        <div class="chord-controls">
+          <label> Tuning
+            <select id="chordTuning"></select>
+          </label>
+          <div class="note-circle-wrap">
+            <div class="note-circle" id="noteCircle"></div>
+            <div class="circle-hint">Tap to toggle notes.</div>
           </div>
-          <div id="customChordEditor" class="custom-chord"></div>
-        </div>
-        <div class="actions">
-          <button id="assignChordBtn" class="secondary">Use for Bar 1</button>
+          <div class="chord-actions">
+            <button id="clearChord">Clear</button>
+            <button id="playActiveChord">Play</button>
+          </div>
         </div>
       </section>
 
-      <section class="panel">
-        <h2>Sequencer (4 bars)</h2>
-        <p class="meta">Each bar holds one chord. Click a bar to select it, then assign from Explore. Mix tunings freely.</p>
-        <p class="meta">Adjust each bar directly: choose its tuning, edit a seven-slot custom chord with per-note dropdowns, and audition any slot with the preview button.</p>
-        <div id="barsContainer" class="bars"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Playback</h2>
+      <section class="panel" id="synthPanel">
+        <div class="panel-header">
+          <h2>Synth Parameters</h2>
+          <div class="patch-controls">
+            <button id="savePatch">Save Patch</button>
+            <button id="loadPatch">Load Patch</button>
+            <input id="patchFile" type="file" accept="application/json" class="hidden" />
+          </div>
+        </div>
         <div class="control-grid">
           <label>Mode
             <select id="modeSelect">
@@ -62,16 +49,15 @@
               <option value="rhythm">Rhythm</option>
             </select>
           </label>
-          <label>Tempo (BPM)
+          <label>Tempo
             <input id="bpm" type="range" min="30" max="300" value="120" step="1" />
             <span class="meta" id="bpmLabel">120 BPM</span>
           </label>
-          <label>Rhythm speed / mapping
+          <label>Rhythm ×
             <input id="rhythmSpeed" type="range" min="2" max="5" step="0.05" value="3" />
-            <span class="meta" id="rhythmLabel">3.00× pitch → beat</span>
+            <span class="meta" id="rhythmLabel">3.00×</span>
           </label>
         </div>
-        <h3>Synth voice (harmony)</h3>
         <div class="control-grid synth-grid">
           <label>Waveform
             <select id="waveform">
@@ -80,23 +66,23 @@
               <option value="square">Square</option>
             </select>
           </label>
-          <label>Attack (ms)
+          <label>Attack
             <input id="attack" type="range" min="0" max="1000" value="40" />
             <span class="meta" id="attackLabel">40 ms</span>
           </label>
-          <label>Decay (ms)
+          <label>Decay
             <input id="decay" type="range" min="0" max="1000" value="200" />
             <span class="meta" id="decayLabel">200 ms</span>
           </label>
-          <label>Sustain level
+          <label>Sustain
             <input id="sustain" type="range" min="0" max="1" step="0.01" value="0.7" />
             <span class="meta" id="sustainLabel">0.70</span>
           </label>
-          <label>Release (ms)
+          <label>Release
             <input id="release" type="range" min="0" max="2000" value="800" />
             <span class="meta" id="releaseLabel">800 ms</span>
           </label>
-          <label>Low-pass cutoff (Hz)
+          <label>Cutoff
             <input id="cutoff" type="range" min="500" max="15000" step="50" value="12000" />
             <span class="meta" id="cutoffLabel">12000 Hz</span>
           </label>
@@ -105,15 +91,10 @@
             <span class="meta" id="resonanceLabel">0.20</span>
           </label>
         </div>
-        <p class="meta">Waveform, envelope, and filter apply to harmony mode chords and renders.</p>
         <div class="actions">
-          <button id="playChordBtn">Play chord</button>
-          <button id="renderChordBtn">Render chord</button>
-        </div>
-        <div class="actions">
-          <button id="playLoopBtn">Play 4-bar loop</button>
-          <button id="stopLoopBtn" class="ghost">Stop loop</button>
-          <button id="renderLoopBtn">Render 4-bar loop</button>
+          <button id="playLoop">Play Loop</button>
+          <button id="stopLoop" class="ghost">Stop</button>
+          <button id="renderLoop">Render Loop</button>
         </div>
         <div id="status" class="meta"></div>
         <audio id="player" controls class="hidden"></audio>
