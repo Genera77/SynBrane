@@ -135,6 +135,16 @@ button.secondary {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
+.arp-block .inline-control {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.arp-block select,
+#loopChordCount {
+  width: 100%;
+}
+
 .synth-grid label {
   min-width: 150px;
 }

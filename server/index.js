@@ -73,11 +73,33 @@ function parseBody(req) {
 }
 
 function parseArpeggioFields(source = {}) {
+  const rawPattern = (source.arpeggioPattern || 'up').toLowerCase();
+  const pattern = rawPattern === 'updown' ? 'updown' : rawPattern;
   return {
     enabled: Boolean(source.arpeggioEnabled),
-    pattern: source.arpeggioPattern || 'up',
+    pattern,
     rate: source.arpeggioRate || '1/8',
   };
+}
+
+function expandSequence(events = [], loopCount = 1) {
+  const iterations = Math.max(1, Number(loopCount) || 1);
+  if (!events.length || iterations === 1) return events;
+  const barsPerLoop = events.reduce((max, event) => {
+    const start = event.bar || 0;
+    const duration = event.durationBars || 1;
+    return Math.max(max, start + duration);
+  }, 0) || events.length;
+  const expanded = [];
+  for (let loopIndex = 0; loopIndex < iterations; loopIndex += 1) {
+    events.forEach((event) => {
+      expanded.push({
+        ...event,
+        bar: (event.bar || 0) + loopIndex * barsPerLoop,
+      });
+    });
+  }
+  return expanded;
 }
 
 function handleTunings(req, res) {
@@ -140,7 +162,8 @@ async function handlePlay(req, res) {
           arpeggio,
         };
       });
-      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events, synthSettings, loopCount });
+      const expanded = expandSequence(events, loopCount || 1);
+      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events: expanded, synthSettings, loopCount });
       sendJson(res, 200, { status: 'ok', playResult });
       return;
     }
@@ -231,7 +254,8 @@ async function handleRender(req, res) {
           arpeggio,
         };
       });
-      const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events, synthSettings });
+      const expanded = expandSequence(events, body.loopCount || 1);
+      const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events: expanded, synthSettings });
       const relativeUrl = `/renders/${renderResult.filename}`;
       sendJson(res, 200, { status: 'ok', file: relativeUrl });
       return;

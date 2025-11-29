@@ -20,9 +20,9 @@ const chordPreset = document.getElementById('chordPreset');
 const chordRoot = document.getElementById('chordRoot');
 const intervalInfo = document.getElementById('intervalInfo');
 const frequencyInfo = document.getElementById('frequencyInfo');
-const arpToggle = document.getElementById('arpToggle');
-const arpRate = document.getElementById('arpRate');
-const arpRateLabel = document.getElementById('arpRateLabel');
+const chordArpEnabled = document.getElementById('chordArpEnabled');
+const chordArpPattern = document.getElementById('chordArpPattern');
+const chordArpRate = document.getElementById('chordArpRate');
 const loopChord = document.getElementById('loopChord');
 const modeSelect = document.getElementById('modeSelect');
 const bpmInput = document.getElementById('bpm');
@@ -47,6 +47,7 @@ const resonanceLabel = document.getElementById('resonanceLabel');
 const playLoopBtn = document.getElementById('playLoop');
 const stopLoopBtn = document.getElementById('stopLoop');
 const renderLoopBtn = document.getElementById('renderLoop');
+const loopChordCountInput = document.getElementById('loopChordCount');
 const statusEl = document.getElementById('status');
 const player = document.getElementById('player');
 const savePatchBtn = document.getElementById('savePatch');
@@ -88,18 +89,29 @@ const defaultSynth = {
 const MIN_OCTAVE_RING = -1;
 const MAX_OCTAVE_RING = 1;
 
-  const state = {
-    tunings: [],
-    baseFrequency: 440,
-    activeChord: 0,
-    chords: Array.from({ length: 7 }, () => ({ tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major' })),
-    mode: 'harmony',
-    bpm: 120,
-    rhythmSpeed: 0.3,
-    synth: JSON.parse(JSON.stringify(defaultSynth)),
-    preview: { arpeggiate: false, arpRateMs: 180, loop: false },
-    loopPreview: { ctx: null, timer: null, stop: false, nodes: [] },
-  };
+function defaultArp() {
+  return { enabled: false, pattern: 'up', rate: '1/8' };
+}
+
+function defaultChord() {
+  return { tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major', arp: defaultArp() };
+}
+
+const MAX_CHORDS = 8;
+
+const state = {
+  tunings: [],
+  baseFrequency: 440,
+  activeChord: 0,
+  chords: Array.from({ length: MAX_CHORDS }, () => defaultChord()),
+  loopChordCount: 4,
+  mode: 'harmony',
+  bpm: 120,
+  rhythmSpeed: 0.3,
+  synth: JSON.parse(JSON.stringify(defaultSynth)),
+  preview: { arpeggiate: false, arpRateMs: 180, loop: false },
+  loopPreview: { ctx: null, timer: null, stop: false, nodes: [] },
+};
 
   function clampRhythmSpeed(value) {
     return Math.min(1, Math.max(0.1, Number(value) || 0.3));
@@ -203,6 +215,10 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
     const span = getDegreeSpan(tuning);
     const minDeg = MIN_OCTAVE_RING * span;
     const maxDeg = (MAX_OCTAVE_RING + 1) * span - 1;
+    chord.arp = {
+      ...defaultArp(),
+      ...(chord.arp || {}),
+    };
     chord.notes = (chord.notes || [])
       .map((deg) => {
         const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
@@ -214,7 +230,11 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
 
 function renderChordSwitcher() {
   chordSwitcher.innerHTML = '';
-  state.chords.forEach((_, idx) => {
+  const visibleChords = Math.max(1, Math.min(state.loopChordCount || 1, state.chords.length));
+  if (state.activeChord >= visibleChords) {
+    state.activeChord = visibleChords - 1;
+  }
+  state.chords.slice(0, visibleChords).forEach((_, idx) => {
     const btn = document.createElement('button');
     btn.textContent = idx + 1;
     btn.className = idx === state.activeChord ? 'active' : '';
@@ -423,6 +443,9 @@ function renderActiveChord() {
   chordLabel.textContent = `Chord ${state.activeChord + 1}`;
   chordTuning.value = chord.tuningId || '';
   chordPreset.value = chord.preset || 'major';
+  chordArpEnabled.checked = Boolean(chord.arp?.enabled);
+  chordArpPattern.value = chord.arp?.pattern || 'up';
+  chordArpRate.value = chord.arp?.rate || '1/8';
   renderRootOptions();
   renderCircle();
 }
@@ -437,7 +460,6 @@ function syncSynthLabels() {
   detuneLabel.textContent = `${state.synth.detuneCents?.toFixed(1) || 0}¢`;
   cutoffLabel.textContent = `${state.synth.filter.cutoffHz} Hz`;
   resonanceLabel.textContent = state.synth.filter.resonance.toFixed(2);
-  arpRateLabel.textContent = `${state.preview.arpRateMs} ms`;
 }
 
 function attachControlListeners() {
@@ -476,17 +498,30 @@ function attachControlListeners() {
     renderCircle();
   };
 
-  arpToggle.onchange = (e) => {
-    state.preview.arpeggiate = e.target.checked;
+  chordArpEnabled.onchange = (e) => {
+    const chord = state.chords[state.activeChord];
+    chord.arp.enabled = e.target.checked;
   };
 
-  arpRate.oninput = (e) => {
-    state.preview.arpRateMs = Number(e.target.value);
-    arpRateLabel.textContent = `${state.preview.arpRateMs} ms`;
+  chordArpPattern.onchange = (e) => {
+    const chord = state.chords[state.activeChord];
+    chord.arp.pattern = e.target.value;
+  };
+
+  chordArpRate.onchange = (e) => {
+    const chord = state.chords[state.activeChord];
+    chord.arp.rate = e.target.value;
   };
 
   loopChord.onchange = (e) => {
     state.preview.loop = e.target.checked;
+  };
+
+  loopChordCountInput.onchange = (e) => {
+    const value = Math.max(1, Math.min(MAX_CHORDS, Number(e.target.value) || 1));
+    state.loopChordCount = value;
+    renderChordSwitcher();
+    renderActiveChord();
   };
 
   clearChordBtn.onclick = () => {
@@ -578,9 +613,9 @@ function chordToEvent(chord, index) {
     chord: { id: `circle-${index}`, degrees: [...chord.notes] },
     customChord: { degrees: [...chord.notes] },
     frequencies,
-    arpeggioEnabled: false,
-    arpeggioPattern: 'up',
-    arpeggioRate: '1/8',
+    arpeggioEnabled: Boolean(chord.arp?.enabled),
+    arpeggioPattern: chord.arp?.pattern || 'up',
+    arpeggioRate: chord.arp?.rate || '1/8',
   };
 }
 
@@ -621,7 +656,39 @@ function applyEnvelope(gainNode, ctx, startTime, durationSec, envelope) {
   return durationSec + release;
 }
 
+function orderFrequenciesForPattern(freqs, pattern) {
+  const sorted = [...freqs].sort((a, b) => a - b);
+  if (pattern === 'down') return [...sorted].reverse();
+  if (pattern === 'updown') {
+    const ascent = [...sorted];
+    const descent = sorted.length > 1 ? sorted.slice(1, -1).reverse() : [];
+    return [...ascent, ...descent];
+  }
+  if (pattern === 'random') {
+    const shuffle = [...sorted];
+    for (let i = shuffle.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffle[i], shuffle[j]] = [shuffle[j], shuffle[i]];
+    }
+    return shuffle;
+  }
+  return sorted;
+}
+
+function stepDurationFromRate(rate, bpm) {
+  const secondsPerBeat = 60 / Math.max(30, bpm || 120);
+  const map = {
+    '1/4': 1,
+    '1/8': 0.5,
+    '1/8T': 1 / 3,
+    '1/16': 0.25,
+  };
+  const beatPortion = map[rate] ?? 0.5;
+  return secondsPerBeat * beatPortion;
+}
+
 function scheduleChordPreview(chord, startTime, durationSec) {
+  if (state.loopPreview.stop) return 0;
   const tuning = getTuning(chord.tuningId);
   if (!tuning) throw new Error('Chord missing tuning');
   if (!chord.notes?.length) throw new Error('Chord has no notes');
@@ -630,11 +697,16 @@ function scheduleChordPreview(chord, startTime, durationSec) {
   const envelope = state.synth.envelope || defaultSynth.envelope;
   const filterCfg = state.synth.filter || {};
   const freqs = chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg));
+  const chordArp = chord.arp || defaultArp();
+  const useArp = chordArp.enabled && freqs.length > 1;
+  const orderedFreqs = useArp ? orderFrequenciesForPattern(freqs, chordArp.pattern) : freqs;
+  const stepSec = useArp ? stepDurationFromRate(chordArp.rate, state.bpm) : durationSec;
+  const noteDuration = useArp ? Math.min(durationSec, Math.max(0.08, stepSec * 0.9)) : durationSec;
+  const steps = useArp ? Math.max(1, Math.floor(durationSec / stepSec)) : orderedFreqs.length;
 
-  const noteDuration = state.preview.arpeggiate ? Math.max(0.15, durationSec * 0.6) : durationSec;
-  const stepSec = state.preview.arpeggiate ? (state.preview.arpRateMs || 150) / 1000 : 0;
-
-  freqs.forEach((freq, idx) => {
+  let lastOffset = 0;
+  for (let idx = 0; idx < steps; idx += 1) {
+    const freq = orderedFreqs[idx % orderedFreqs.length];
     const osc = ctx.createOscillator();
     const oscType = waveformToOscType(state.synth.waveform || defaultSynth.waveform);
     osc.type = oscType;
@@ -657,7 +729,7 @@ function scheduleChordPreview(chord, startTime, durationSec) {
       trackPreviewNodes(filter);
     }
 
-    const noteStart = startTime + idx * stepSec;
+    const noteStart = startTime + (useArp ? idx * stepSec : 0);
     const totalDuration = applyEnvelope(gain, ctx, noteStart, noteDuration, envelope);
     gain.gain.setValueAtTime(0.0001, noteStart - 0.01);
     lastNode.connect(gain);
@@ -666,11 +738,11 @@ function scheduleChordPreview(chord, startTime, durationSec) {
     osc.start(noteStart);
     osc.stop(noteStart + totalDuration + 0.05);
     trackPreviewNodes(osc, gain);
-  });
+    lastOffset = useArp ? idx * stepSec + noteDuration : noteDuration;
+  }
 
   const releaseSec = Math.max(0, (state.synth.envelope?.releaseMs || 0) / 1000);
-  const lastNoteOffset = state.preview.arpeggiate ? (freqs.length - 1) * stepSec : 0;
-  return lastNoteOffset + noteDuration + releaseSec;
+  return lastOffset + releaseSec;
 }
 
   async function playChord(index) {
@@ -703,22 +775,28 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 
   function buildLoopPayload() {
     state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
-    const sequence = state.chords.map((chord, idx) => chordToEvent(chord, idx));
+    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(state.loopChordCount, state.chords.length)));
+    const sequence = visibleChords.map((chord, idx) => chordToEvent(chord, idx));
+    const loopCount = 10;
     return {
       mode: state.mode,
       bpm: state.bpm,
       rhythmSpeed: state.rhythmSpeed,
       synthSettings: { ...state.synth },
-      loopCount: 10,
+      loopCount,
       sequence,
+      loopChordCount: sequence.length,
     };
   }
 
 async function playLoop() {
   try {
     stopPreview();
+    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(state.loopChordCount, state.chords.length)));
+    visibleChords.forEach((chord, idx) => ensureChordComplete(chord, idx));
 
     const ctx = getPreviewContext();
+    state.loopPreview.stop = false;
     const beatsPerBar = 4;
     const barSeconds = (60 / Math.max(30, state.bpm)) * beatsPerBar;
     const rhythmValue = clampRhythmSpeed(state.rhythmSpeed);
@@ -726,21 +804,23 @@ async function playLoop() {
     const rhythmFactor = 0.75 + rhythmValue * 0.45;
     const barDuration = barSeconds / rhythmFactor;
     const startTime = ctx.currentTime + 0.1;
+    const loopCount = 10;
 
-    let longest = 0;
-    state.chords.forEach((chord, idx) => {
-      ensureChordComplete(chord, idx);
-      const chordStart = startTime + idx * barDuration;
-      const chordDuration = Math.max(0.35, barDuration * 0.85);
-      const total = scheduleChordPreview(chord, chordStart, chordDuration);
-      longest = Math.max(longest, idx * barDuration + total);
-    });
+    const chordDuration = Math.max(0.35, barDuration * 0.85);
+    const totalBars = visibleChords.length * loopCount;
+    for (let loopIndex = 0; loopIndex < loopCount; loopIndex += 1) {
+      visibleChords.forEach((chord, idx) => {
+        const chordStart = startTime + (loopIndex * visibleChords.length + idx) * barDuration;
+        scheduleChordPreview(chord, chordStart, chordDuration);
+      });
+    }
 
+    const totalDuration = totalBars * barDuration + (state.synth.envelope.releaseMs || 0) / 1000;
     state.loopPreview.timer = setTimeout(
       () => stopPreview('Loop preview finished'),
-      (longest + 0.3) * 1000,
+      (totalDuration + 0.3) * 1000,
     );
-    updateStatus(`Loop previewing at ${state.bpm} BPM`);
+    updateStatus(`Loop previewing ${visibleChords.length} chords × 10 at ${state.bpm} BPM`);
   } catch (error) {
     updateStatus(error.message);
     // eslint-disable-next-line no-console
@@ -810,6 +890,7 @@ function stopPreview(reason) {
 function buildPatch() {
   return {
     version: 1,
+    loopChordCount: state.loopChordCount,
     global: {
       mode: state.mode,
       tempo: state.bpm,
@@ -822,7 +903,7 @@ function buildPatch() {
       notes: [...(chord.notes || [])],
       root: chord.root || 0,
       preset: chord.preset,
-      arp: { enabled: false, pattern: 'up', rate: '1/8' },
+      arp: { ...defaultArp(), ...(chord.arp || {}) },
     })),
   };
 }
@@ -850,21 +931,20 @@ function savePatch() {
 function applyPatch(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid patch');
   const chords = Array.isArray(data.chords) ? data.chords.slice(0, state.chords.length) : [];
+  const loopChordCount = Math.max(1, Math.min(MAX_CHORDS, Number(data.loopChordCount || data.chords?.length || state.loopChordCount) || state.loopChordCount));
+  state.loopChordCount = loopChordCount;
   chords.forEach((entry, idx) => {
     if (!state.chords[idx]) return;
     state.chords[idx].tuningId = entry.tuningId || state.tunings[0]?.id || null;
     state.chords[idx].notes = Array.isArray(entry.notes) ? entry.notes.map((n) => Number(n)) : [];
     state.chords[idx].root = Number(entry.root ?? state.chords[idx].root ?? 0);
     state.chords[idx].preset = entry.preset || state.chords[idx].preset || 'major';
+    state.chords[idx].arp = { ...defaultArp(), ...(entry.arp || {}) };
     normalizeChordNotes(state.chords[idx]);
   });
   for (let idx = chords.length; idx < state.chords.length; idx += 1) {
-    state.chords[idx] = {
-      tuningId: state.tunings[0]?.id || null,
-      notes: [0, 4, 7],
-      root: 0,
-      preset: 'major',
-    };
+    state.chords[idx] = defaultChord();
+    state.chords[idx].tuningId = state.tunings[0]?.id || null;
     normalizeChordNotes(state.chords[idx]);
   }
     if (data.global) {
@@ -907,10 +987,10 @@ function applyPatch(data) {
   detuneInput.value = state.synth.detuneCents;
   cutoffInput.value = state.synth.filter.cutoffHz;
   resonanceInput.value = state.synth.filter.resonance;
-  arpToggle.checked = state.preview.arpeggiate;
-  arpRate.value = state.preview.arpRateMs;
+  loopChordCountInput.value = state.loopChordCount;
   loopChord.checked = state.preview.loop;
   syncSynthLabels();
+  renderChordSwitcher();
   renderActiveChord();
 }
 
@@ -934,12 +1014,11 @@ async function init() {
   attachControlListeners();
   syncSynthLabels();
   renderPresetOptions();
-  arpToggle.checked = state.preview.arpeggiate;
-  arpRate.value = state.preview.arpRateMs;
+  loopChordCountInput.value = state.loopChordCount;
   loopChord.checked = state.preview.loop;
   const res = await fetch(apiUrl('/api/tunings'));
   const data = await res.json();
-  state.tunings = data.tunings || [];
+  state.tunings = (data.tunings || []).filter((tuning) => !(tuning.type === 'edo' && Number(tuning.value) === 32));
   state.baseFrequency = data.baseFrequency || 440;
   state.chords.forEach((chord) => {
     chord.tuningId = state.tunings[0]?.id || null;
