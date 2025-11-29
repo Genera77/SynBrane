@@ -83,22 +83,6 @@ const EDO_PRESETS = {
     ],
     rootCount: 44,
   },
-  // 32-EDO dense lattice with small-step interval play.
-  32: {
-    label: '32-EDO',
-    description: 'Dense microtonal 32-EDO showcasing small-step color.',
-    chords: [
-      { id: '32E-major-like', name: 'Major-like triad', label: '32-EDO major-like triad (0,10,19)', degrees: [0, 10, 19] },
-      { id: '32E-minor-like', name: 'Minor-like triad', label: '32-EDO minor-like triad (0,8,19)', degrees: [0, 8, 19] },
-      { id: '32E-dominantish', name: 'Dominant-like 7', label: '32-EDO dominant-like 7 (0,10,19,27)', degrees: [0, 10, 19, 27] },
-      { id: '32E-stacked-4ths', name: 'Stacked fourths', label: '32-EDO stack of 4ths (0,13,26)', degrees: [0, 13, 26] },
-      { id: '32E-tight', name: 'Tight micro cluster', label: '32-EDO cluster (0,1,3,7)', degrees: [0, 1, 3, 7] },
-      { id: '32E-color-weave', name: 'Step weave', label: '32-EDO weave (0,2,5,9)', degrees: [0, 2, 5, 9] },
-      { id: '32E-wide', name: 'Wide micro spread', label: '32-EDO spread (0,11,21,29)', degrees: [0, 11, 21, 29] },
-      { id: '32E-fifthish', name: 'Fifth-ish stack', label: '32-EDO fifth-ish stack (0,7,14,21)', degrees: [0, 7, 14, 21] },
-    ],
-    rootCount: 64,
-  },
 };
 
 function edoFrequency(baseFrequency, stepCount, degree) {
@@ -196,7 +180,7 @@ function generateScalaChords(intervals, name) {
 }
 
 function listTunings() {
-  const edoSteps = [12, 19, 22, 24, 32, 8, 31];
+  const edoSteps = [12, 19, 22, 24, 8, 31];
   const edoList = edoSteps.map((steps) => ({
     id: `edo:${steps}`,
     type: 'edo',

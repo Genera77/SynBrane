@@ -85,11 +85,14 @@ const defaultSynth = {
   detuneCents: 3,
 };
 
+const MIN_OCTAVE_RING = -1;
+const MAX_OCTAVE_RING = 1;
+
   const state = {
     tunings: [],
     baseFrequency: 440,
     activeChord: 0,
-    chords: Array.from({ length: 4 }, () => ({ tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major' })),
+    chords: Array.from({ length: 7 }, () => ({ tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major' })),
     mode: 'harmony',
     bpm: 120,
     rhythmSpeed: 0.3,
@@ -198,9 +201,8 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
   function normalizeChordNotes(chord) {
     const tuning = getTuning(chord.tuningId);
     const span = getDegreeSpan(tuning);
-    const maxOctaveSpread = 2;
-    const minDeg = -maxOctaveSpread * span;
-    const maxDeg = (maxOctaveSpread + 1) * span - 1;
+    const minDeg = MIN_OCTAVE_RING * span;
+    const maxDeg = (MAX_OCTAVE_RING + 1) * span - 1;
     chord.notes = (chord.notes || [])
       .map((deg) => {
         const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
@@ -267,31 +269,36 @@ function baseHueForTuning(tuning) {
   if (tuning.type === 'edo') {
     const hueMap = {
       8: 150,
-      12: 190,
-      19: 300,
-      22: 35,
-      24: 130,
-      31: 18,
-      32: 260,
+      12: 188,
+      19: 295,
+      22: 48,
+      24: 328,
+      31: 32,
     };
-    return hueMap[tuning.value] ?? ((tuning.value * 9 + 40) % 360);
+    return hueMap[tuning.value] ?? ((tuning.value * 11 + 60) % 360);
   }
-  return 210;
+  return 135;
 }
 
 function octaveColor(tuning, octave) {
   const baseHue = baseHueForTuning(tuning);
-  const hue = (baseHue + octave * 10 + 360) % 360;
-  const saturation = Math.max(48, Math.min(78, 72 - Math.abs(octave) * 6));
-  const lightness = Math.max(34, Math.min(78, 54 + octave * 7));
-  const mutedLight = Math.max(40, Math.min(88, lightness + (octave >= 0 ? 8 : 12)));
+  const hue = (baseHue + octave * 8 + 360) % 360;
+  const baseSaturation = tuning?.type === 'scala' ? 58 : 68;
+  const saturation = Math.max(48, Math.min(82, baseSaturation + octave * 6));
+  const baseLightness = tuning?.type === 'scala' ? 48 : 52;
+  const lightness = Math.max(32, Math.min(80, baseLightness + octave * 10));
+  const mutedLight = Math.max(30, Math.min(78, lightness - 8));
+  const highlightLight = Math.max(50, Math.min(92, lightness + 12));
   const textColor = lightness > 62 ? '#0c1118' : '#f7fbff';
   const strongText = lightness > 58 ? '#0b0f14' : '#f9fbff';
   return {
     main: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
-    muted: `hsl(${hue}, ${saturation - 8}%, ${mutedLight}%)`,
+    muted: `hsla(${hue}, ${saturation - 10}%, ${mutedLight}%, 0.7)`,
+    mutedStroke: `hsla(${hue}, ${saturation - 8}%, ${mutedLight + 6}%, 0.9)`,
+    highlight: `hsl(${hue}, ${Math.min(95, saturation + 8)}%, ${highlightLight}%)`,
+    glow: `hsla(${hue}, ${Math.min(95, saturation + 12)}%, ${highlightLight + 6}%, 0.85)`,
     shadow: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.45)`,
-    outline: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.85)`,
+    outline: `hsla(${hue}, ${Math.min(96, saturation + 4)}%, ${highlightLight}%, 0.95)`,
     text: textColor,
     strongText,
   };
@@ -303,8 +310,8 @@ function octaveColor(tuning, octave) {
     const tuning = getTuning(chord.tuningId);
     const span = getDegreeSpan(tuning);
     noteCircle.innerHTML = '';
-    const minOctave = -2;
-    const maxOctave = 2;
+    const minOctave = MIN_OCTAVE_RING;
+    const maxOctave = MAX_OCTAVE_RING;
     const octaves = [];
     for (let octave = minOctave; octave <= maxOctave; octave += 1) {
       octaves.push(octave);
@@ -340,7 +347,8 @@ function octaveColor(tuning, octave) {
         const palette = octaveColor(tuning, octave);
         const isActive = chord.notes.includes(absoluteDegree);
         const point = document.createElement('div');
-        point.className = `note-point ${isActive ? 'active' : ''}`;
+        point.className = 'note-point';
+        point.classList.add(isActive ? 'active' : 'muted');
         point.style.width = `${pointSize}px`;
         point.style.height = `${pointSize}px`;
         point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, pointSize - 8)}px`;
@@ -349,16 +357,19 @@ function octaveColor(tuning, octave) {
         point.style.top = `${y}px`;
         point.style.setProperty('--bubble-main', palette.main);
         point.style.setProperty('--bubble-muted', palette.muted);
+        point.style.setProperty('--bubble-highlight', palette.highlight);
+        point.style.setProperty('--bubble-glow', palette.glow);
         point.style.setProperty('--bubble-text', palette.text);
         point.style.setProperty('--bubble-text-strong', palette.strongText);
         point.style.setProperty('--bubble-shadow', palette.shadow);
         point.style.setProperty('--bubble-outline', palette.outline);
-        point.style.background = isActive ? palette.main : palette.muted;
-        point.style.borderColor = isActive ? palette.main : palette.muted;
+        point.style.background = isActive ? palette.highlight : palette.muted;
+        point.style.borderColor = isActive ? palette.outline : palette.mutedStroke;
         point.style.color = isActive ? palette.strongText : palette.text;
+        point.style.opacity = isActive ? '1' : '0.6';
         point.style.boxShadow = isActive
-          ? `0 0 0 1px ${palette.outline}, 0 8px 18px ${palette.shadow}`
-          : '0 3px 8px rgba(0, 0, 0, 0.4)';
+          ? `0 0 0 2px ${palette.outline}, 0 0 14px ${palette.glow}, 0 12px 26px rgba(0, 0, 0, 0.55)`
+          : '0 2px 8px rgba(0, 0, 0, 0.32)';
         point.textContent = degreeLabel(tuning, degree, chord.root || 0);
         point.title = `Degree ${degree} (oct ${octave >= 0 ? `+${octave}` : octave})`;
         point.onclick = () => {
@@ -709,16 +720,18 @@ async function playLoop() {
 
     const ctx = getPreviewContext();
     const beatsPerBar = 4;
-    const baseBeatSeconds = 60 / Math.max(1, state.bpm);
-    const speedMultiplier = clampRhythmSpeed(state.rhythmSpeed);
-    const barDuration = (baseBeatSeconds * beatsPerBar) / speedMultiplier;
+    const barSeconds = (60 / Math.max(30, state.bpm)) * beatsPerBar;
+    const rhythmValue = clampRhythmSpeed(state.rhythmSpeed);
+    state.rhythmSpeed = rhythmValue;
+    const rhythmFactor = 0.75 + rhythmValue * 0.45;
+    const barDuration = barSeconds / rhythmFactor;
     const startTime = ctx.currentTime + 0.1;
 
     let longest = 0;
     state.chords.forEach((chord, idx) => {
       ensureChordComplete(chord, idx);
       const chordStart = startTime + idx * barDuration;
-      const chordDuration = Math.max(0.2, barDuration * 0.9);
+      const chordDuration = Math.max(0.35, barDuration * 0.85);
       const total = scheduleChordPreview(chord, chordStart, chordDuration);
       longest = Math.max(longest, idx * barDuration + total);
     });
@@ -727,7 +740,7 @@ async function playLoop() {
       () => stopPreview('Loop preview finished'),
       (longest + 0.3) * 1000,
     );
-    updateStatus('Loop previewing');
+    updateStatus(`Loop previewing at ${state.bpm} BPM`);
   } catch (error) {
     updateStatus(error.message);
     // eslint-disable-next-line no-console
@@ -836,7 +849,7 @@ function savePatch() {
 
 function applyPatch(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid patch');
-  const chords = Array.isArray(data.chords) ? data.chords.slice(0, 4) : [];
+  const chords = Array.isArray(data.chords) ? data.chords.slice(0, state.chords.length) : [];
   chords.forEach((entry, idx) => {
     if (!state.chords[idx]) return;
     state.chords[idx].tuningId = entry.tuningId || state.tunings[0]?.id || null;
@@ -845,6 +858,15 @@ function applyPatch(data) {
     state.chords[idx].preset = entry.preset || state.chords[idx].preset || 'major';
     normalizeChordNotes(state.chords[idx]);
   });
+  for (let idx = chords.length; idx < state.chords.length; idx += 1) {
+    state.chords[idx] = {
+      tuningId: state.tunings[0]?.id || null,
+      notes: [0, 4, 7],
+      root: 0,
+      preset: 'major',
+    };
+    normalizeChordNotes(state.chords[idx]);
+  }
     if (data.global) {
       state.mode = data.global.mode || state.mode;
       state.bpm = Number(data.global.tempo || state.bpm);
