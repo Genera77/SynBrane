@@ -69,6 +69,20 @@ const EDO_PRESETS = {
     ],
     rootCount: 48,
   },
+  // 22-EDO bright meantone-adjacent lattice with flexible thirds.
+  22: {
+    label: '22-EDO',
+    description: '22-tone equal temperament with close meantone color and flexible thirds.',
+    chords: [
+      { id: '22E-majorish', name: 'Major-ish triad', label: '22-EDO major-ish triad (0,7,13)', degrees: [0, 7, 13] },
+      { id: '22E-minorish', name: 'Minor-ish triad', label: '22-EDO minor-ish triad (0,6,13)', degrees: [0, 6, 13] },
+      { id: '22E-dominantish', name: 'Dominant-ish 7', label: '22-EDO dominant-ish 7 (0,7,13,19)', degrees: [0, 7, 13, 19] },
+      { id: '22E-sus2', name: 'Suspended 2', label: '22-EDO sus2 (0,4,13)', degrees: [0, 4, 13] },
+      { id: '22E-sus4', name: 'Suspended 4', label: '22-EDO sus4 (0,8,13)', degrees: [0, 8, 13] },
+      { id: '22E-add9', name: 'Add9', label: '22-EDO add9 (0,7,13,22)', degrees: [0, 7, 13, 22] },
+    ],
+    rootCount: 44,
+  },
   // 32-EDO dense lattice with small-step interval play.
   32: {
     label: '32-EDO',
@@ -182,7 +196,7 @@ function generateScalaChords(intervals, name) {
 }
 
 function listTunings() {
-  const edoSteps = [12, 19, 24, 32, 8, 31];
+  const edoSteps = [12, 19, 22, 24, 32, 8, 31];
   const edoList = edoSteps.map((steps) => ({
     id: `edo:${steps}`,
     type: 'edo',

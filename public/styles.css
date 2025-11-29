@@ -131,6 +131,10 @@ button.secondary {
   gap: 12px;
 }
 
+.chord-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
 .synth-grid label {
   min-width: 150px;
 }
@@ -179,8 +183,8 @@ button.secondary {
 
 .note-circle {
   position: relative;
-  width: 260px;
-  height: 260px;
+  width: 230px;
+  height: 230px;
   border-radius: 50%;
   border: 1px dashed var(--border);
   margin: 0 auto;
@@ -188,8 +192,8 @@ button.secondary {
 
 .note-point {
   position: absolute;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: #1c222d;
@@ -226,6 +230,36 @@ button.secondary {
 .patch-controls {
   display: flex;
   gap: 8px;
+}
+
+.inline-control {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chord-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.chord-insights h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  color: var(--subtle);
+}
+
+.interval-list {
+  background: #1a1f29;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 60px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: pre-line;
 }
 
 @media (max-width: 900px) {
