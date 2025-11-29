@@ -10,9 +10,9 @@ Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square),
   - Plain HTML/CSS/JS served by the backend.
   - Fetches tunings and per-tuning chord lists (with roots) from the API.
   - **Explore palette:** tuning selection, root selection (12-TET note names for 12-EDO, numeric degrees otherwise), chord browsing, and a **Custom Chord** editor with seven slots. Each slot can be toggled on/off, assigned to any degree in the active tuning, and shifted up or down by octaves. Selecting a bar in the 4-bar sequencer highlights the destination; the Explore palette can assign either a preset chord or the current Custom Chord to that bar via the “Use for Bar X” control.
-  - **Sequencer:** 4-bar grid where each bar can use its own tuning/root and choose between a preset chord or the shared Custom Chord; click a bar to mark it as the destination for Explore assignments. Custom chords carry their active notes (including octave shifts) into every bar that references them.
+  - **Sequencer:** 4-bar grid where each bar can use its own tuning/root and choose between a preset chord or a per-bar Custom Chord; click a bar to mark it as the destination for Explore assignments. Each bar exposes its own seven-slot custom editor with tuning-aware, two-octave dropdowns, per-slot enable toggles, and 🔊 note previews. Custom chords carry their active notes (including octave shifts) into every bar that references them.
   - Global controls: mode (harmony vs rhythm), expanded tempo slider (30–300 BPM), rhythm-speed multiplier slider (2.0–5.0 with fine steps), and synth controls (waveform, ADSR envelope, low-pass cutoff/resonance).
-  - Calls `/api/play` to audition a single chord or the 4-bar loop and `/api/render` to render to WAV. A Web Audio preview mirrors the synth/rhythm design locally. Loop previews repeat until stopped or until 10 passes are reached.
+  - Calls `/api/play` to audition a single chord or the 4-bar loop and `/api/render` to render to WAV. Web Audio drives local preview for chords, rhythm clicks, and per-slot note auditions so edits can be heard immediately. Loop previews repeat until stopped or until 10 passes are reached.
 
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
@@ -60,7 +60,8 @@ Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square),
 
 ## UI controls
 - Explore palette for tuning/root/chord selection plus a seven-slot Custom Chord editor with octave offsets; assign the selected preset or the custom layout to the highlighted bar via “Use for Bar X.”
-- Sequencer shows four bars; click any bar to select it for assignment. Mix tunings freely per bar and toggle each bar between preset chords and the shared Custom Chord.
+- Sequencer shows four bars; click any bar to select it for assignment. Mix tunings freely per bar, toggle each bar between preset chords and its own per-bar Custom Chord, and edit that bar’s seven slots directly with tuning-aware dropdowns and note-enable toggles.
+- Per-slot previews: every custom slot includes a 🔊 preview that plays a short Web Audio tone for that note using the bar’s tuning/root and current synth settings without interrupting the loop.
 - Global controls: tempo (30–300 BPM), harmony vs rhythm mode, rhythm-speed multiplier (2.0–5.0).
 - Synth controls (harmony): waveform, attack, decay, sustain level, release, low-pass cutoff, resonance.
 - Preview/render actions for a single chord or the full 4-bar loop. Loop playback repeats until you press Stop or until 10 passes have played.
