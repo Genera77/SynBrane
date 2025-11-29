@@ -73,12 +73,13 @@ function parseBody(req) {
 }
 
 function parseArpeggioFields(source = {}) {
-  const rawPattern = (source.arpeggioPattern || 'up').toLowerCase();
+  const raw = source.arpeggio || {};
+  const rawPattern = (raw.pattern || source.arpeggioPattern || 'up').toLowerCase();
   const pattern = rawPattern === 'updown' ? 'updown' : rawPattern;
   return {
-    enabled: Boolean(source.arpeggioEnabled),
+    enabled: raw.enabled ?? Boolean(source.arpeggioEnabled),
     pattern,
-    rate: source.arpeggioRate || '1/8',
+    rate: raw.rate || source.arpeggioRate || '1/8',
   };
 }
 

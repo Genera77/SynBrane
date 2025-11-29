@@ -675,6 +675,11 @@ function ensureChordComplete(chord, index) {
 function chordToEvent(chord, index) {
   ensureChordComplete(chord, index);
   const frequencies = chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg));
+  const arpeggio = {
+    enabled: Boolean(chord.arp?.enabled),
+    pattern: chord.arp?.pattern || 'up',
+    rate: chord.arp?.rate || '1/8',
+  };
   return {
     bar: index,
     durationBars: 1,
@@ -686,10 +691,33 @@ function chordToEvent(chord, index) {
     degrees: [...chord.notes],
     noteCount: chord.notes.length,
     frequencies,
-    arpeggioEnabled: Boolean(chord.arp?.enabled),
-    arpeggioPattern: chord.arp?.pattern || 'up',
-    arpeggioRate: chord.arp?.rate || '1/8',
+    mode: state.mode,
+    arpeggioEnabled: arpeggio.enabled,
+    arpeggioPattern: arpeggio.pattern,
+    arpeggioRate: arpeggio.rate,
+    arpeggio,
   };
+}
+
+function expandSequence(events, loopCount = 1) {
+  const iterations = Math.max(1, Number(loopCount) || 1);
+  if (!events.length || iterations === 1) return events;
+  const barsPerLoop =
+    events.reduce((max, event) => {
+      const start = event.bar || 0;
+      const duration = event.durationBars || 1;
+      return Math.max(max, start + duration);
+    }, 0) || events.length;
+  const expanded = [];
+  for (let loopIndex = 0; loopIndex < iterations; loopIndex += 1) {
+    events.forEach((event) => {
+      expanded.push({
+        ...event,
+        bar: (event.bar || 0) + loopIndex * barsPerLoop,
+      });
+    });
+  }
+  return expanded;
 }
 
 function getPreviewContext() {
@@ -938,14 +966,14 @@ function triggerDrum(role, ctx, when, velocity = 1) {
   return nodes.length ? 0.5 : 0;
 }
 
-function scheduleRhythmPreview(chord, startTime, durationSec) {
+function scheduleRhythmPreview(chord, startTime, durationSec, rhythmSpeed, tempo) {
   if (state.loopPreview.stop) return 0;
   const ctx = getPreviewContext();
   const pattern = buildRhythmPattern({
     degrees: chord.notes || [],
     durationSec,
-    bpm: state.bpm,
-    rhythmSpeed: clampRhythmSpeed(state.rhythmSpeed),
+    bpm: tempo || state.bpm,
+    rhythmSpeed: clampRhythmSpeed(rhythmSpeed ?? state.rhythmSpeed),
     voiceCount: chord.notes?.length || 0,
   });
 
@@ -956,20 +984,21 @@ function scheduleRhythmPreview(chord, startTime, durationSec) {
   return pattern.duration;
 }
 
-function scheduleHarmonyPreview(chord, startTime, durationSec) {
+function scheduleHarmonyPreview(chord, startTime, durationSec, synthSettings, tempo) {
   if (state.loopPreview.stop) return 0;
   const tuning = getTuning(chord.tuningId);
   if (!tuning) throw new Error('Chord missing tuning');
   if (!chord.notes?.length) throw new Error('Chord has no notes');
 
   const ctx = getPreviewContext();
-  const envelope = state.synth.envelope || defaultSynth.envelope;
-  const filterCfg = state.synth.filter || {};
+  const synth = synthSettings || state.synth;
+  const envelope = synth.envelope || defaultSynth.envelope;
+  const filterCfg = synth.filter || {};
   const freqs = chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg));
   const chordArp = chord.arp || defaultArp();
   const useArp = chordArp.enabled && freqs.length > 1;
   const orderedFreqs = useArp ? orderFrequenciesForPattern(freqs, chordArp.pattern) : freqs;
-  const stepSec = useArp ? stepDurationFromRate(chordArp.rate, state.bpm) : durationSec;
+  const stepSec = useArp ? stepDurationFromRate(chordArp.rate, tempo || state.bpm) : durationSec;
   const noteDuration = useArp ? Math.min(durationSec, Math.max(0.08, stepSec * 0.9)) : durationSec;
   const steps = useArp ? Math.max(1, Math.floor(durationSec / stepSec)) : orderedFreqs.length;
 
@@ -977,10 +1006,10 @@ function scheduleHarmonyPreview(chord, startTime, durationSec) {
   for (let idx = 0; idx < steps; idx += 1) {
     const freq = orderedFreqs[idx % orderedFreqs.length];
     const osc = ctx.createOscillator();
-    const oscType = waveformToOscType(state.synth.waveform || defaultSynth.waveform);
+    const oscType = waveformToOscType(synth.waveform || defaultSynth.waveform);
     osc.type = oscType;
     osc.frequency.setValueAtTime(freq, startTime);
-    const detuneRange = getDegreeSpan(tuning) > 12 ? state.synth.detuneCents || 0 : 0;
+    const detuneRange = getDegreeSpan(tuning) > 12 ? synth.detuneCents || 0 : 0;
     const detune = detuneRange ? (Math.random() * 2 - 1) * detuneRange : 0;
     osc.detune.setValueAtTime(detune, startTime);
 
@@ -1010,15 +1039,16 @@ function scheduleHarmonyPreview(chord, startTime, durationSec) {
     lastOffset = useArp ? idx * stepSec + noteDuration : noteDuration;
   }
 
-  const releaseSec = Math.max(0, (state.synth.envelope?.releaseMs || 0) / 1000);
+  const releaseSec = Math.max(0, (synth.envelope?.releaseMs || 0) / 1000);
   return lastOffset + releaseSec;
 }
 
-function scheduleChordPreview(chord, startTime, durationSec) {
-  if (state.mode === 'rhythm') {
-    return scheduleRhythmPreview(chord, startTime, durationSec);
+function scheduleChordPreview(chord, startTime, durationSec, { mode, synthSettings, rhythmSpeed, tempo } = {}) {
+  const activeMode = mode || state.mode;
+  if (activeMode === 'rhythm') {
+    return scheduleRhythmPreview(chord, startTime, durationSec, rhythmSpeed, tempo);
   }
-  return scheduleHarmonyPreview(chord, startTime, durationSec);
+  return scheduleHarmonyPreview(chord, startTime, durationSec, synthSettings, tempo);
 }
 
   async function playChord(index) {
@@ -1031,7 +1061,12 @@ function scheduleChordPreview(chord, startTime, durationSec) {
       const startTime = ctx.currentTime + 0.05;
       const beatsPerBar = 4;
       const sustainDuration = state.mode === 'rhythm' ? (60 / Math.max(30, state.bpm)) * beatsPerBar : 1;
-      const total = scheduleChordPreview(chord, startTime, sustainDuration);
+      const total = scheduleChordPreview(chord, startTime, sustainDuration, {
+        mode: state.mode,
+        synthSettings: state.synth,
+        rhythmSpeed: state.rhythmSpeed,
+        tempo: state.bpm,
+      });
 
       updateStatus(`Previewing chord ${index + 1}`);
       state.loopPreview.timer = setTimeout(() => {
@@ -1053,13 +1088,14 @@ function scheduleChordPreview(chord, startTime, durationSec) {
   function buildLoopPayload() {
     state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
     const visibleChords = state.chords.slice(0, Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount), state.chords.length)));
+    visibleChords.forEach((chord, idx) => ensureChordComplete(chord, idx));
     const sequence = visibleChords.map((chord, idx) => chordToEvent(chord, idx));
     const loopCount = 10;
     return {
       mode: state.mode,
       bpm: state.bpm,
       rhythmSpeed: state.rhythmSpeed,
-      synthSettings: { ...state.synth },
+      synthSettings: JSON.parse(JSON.stringify(state.synth)),
       loopCount,
       sequence,
       loopChordCount: sequence.length,
@@ -1069,33 +1105,46 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 async function playLoop() {
   try {
     stopPreview();
-    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount), state.chords.length)));
-    visibleChords.forEach((chord, idx) => ensureChordComplete(chord, idx));
+    const payload = buildLoopPayload();
+    const { sequence, loopCount, bpm, mode, synthSettings, rhythmSpeed } = payload;
+    if (!sequence.length) throw new Error('No chords to play');
 
     const ctx = getPreviewContext();
     state.loopPreview.stop = false;
     const beatsPerBar = 4;
-    const barDuration = (60 / Math.max(30, state.bpm)) * beatsPerBar;
-    const rhythmValue = clampRhythmSpeed(state.rhythmSpeed);
-    state.rhythmSpeed = rhythmValue;
+    const barDuration = (60 / Math.max(30, bpm)) * beatsPerBar;
+    const expanded = expandSequence(sequence, loopCount);
     const startTime = ctx.currentTime + 0.1;
-    const loopCount = 10;
 
-    const chordDuration = state.mode === 'rhythm' ? barDuration : Math.max(0.35, barDuration * 0.85);
-    const totalBars = visibleChords.length * loopCount;
-    for (let loopIndex = 0; loopIndex < loopCount; loopIndex += 1) {
-      visibleChords.forEach((chord, idx) => {
-        const chordStart = startTime + (loopIndex * visibleChords.length + idx) * barDuration;
-        scheduleChordPreview(chord, chordStart, chordDuration);
+    const totalBars = expanded.reduce((max, event) => Math.max(max, (event.bar || 0) + (event.durationBars || 1)), 0);
+    expanded.forEach((event) => {
+      const chordDuration = barDuration * (event.durationBars || 1);
+      const chordStart = startTime + (event.bar || 0) * barDuration;
+      const chord = {
+        tuningId: event.tuningId,
+        root: event.root || 0,
+        notes: event.degrees || event.customChord?.degrees || [],
+        arp: event.arpeggio || {
+          enabled: Boolean(event.arpeggioEnabled),
+          pattern: event.arpeggioPattern || 'up',
+          rate: event.arpeggioRate || '1/8',
+        },
+      };
+      scheduleChordPreview(chord, chordStart, chordDuration, {
+        mode,
+        synthSettings,
+        rhythmSpeed,
+        tempo: bpm,
       });
-    }
+    });
 
-    const totalDuration = totalBars * barDuration + (state.mode === 'rhythm' ? 0.4 : (state.synth.envelope.releaseMs || 0) / 1000);
+    const tail = mode === 'rhythm' ? 0.4 : (synthSettings.envelope?.releaseMs || 0) / 1000;
+    const totalDuration = totalBars * barDuration + tail;
     state.loopPreview.timer = setTimeout(
       () => stopPreview('Loop preview finished'),
       (totalDuration + 0.3) * 1000,
     );
-    updateStatus(`Loop previewing ${visibleChords.length} chords × 10 at ${state.bpm} BPM`);
+    updateStatus(`Loop previewing ${sequence.length} chords × ${loopCount} at ${bpm} BPM`);
   } catch (error) {
     updateStatus(error.message);
     // eslint-disable-next-line no-console

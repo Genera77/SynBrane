@@ -101,6 +101,7 @@ function normalizeSynthSettings(raw = {}) {
       cutoffHz: clamp(Number(filter.cutoffHz ?? 12000), 50, 20000),
       resonance: clamp(Number(filter.resonance ?? 0.2), 0, 1),
     },
+    detuneCents: clamp(Number(raw.detuneCents ?? 0), 0, 50),
   };
 }
 
@@ -253,7 +254,9 @@ function generateArpeggiatedSamples({ frequencies, duration, sampleRate, synth, 
     const noteTotalDuration = noteDuration + releaseSeconds;
     const totalNoteSamples = Math.max(1, Math.floor(noteTotalDuration * sampleRate));
     const envelope = createAdsrEnvelope(totalNoteSamples, sampleRate, noteDuration, synth.envelope);
-    const freq = pattern[step % pattern.length];
+    const baseFreq = pattern[step % pattern.length];
+    const detune = synth.detuneCents ? 2 ** (((Math.random() * 2 - 1) * synth.detuneCents) / 1200) : 1;
+    const freq = baseFreq * detune;
     let phase = 0;
     const phaseIncrement = (2 * Math.PI * freq) / sampleRate;
     const startSample = Math.floor(noteStart * sampleRate);
@@ -307,7 +310,9 @@ function generateChordSamples({ mode, frequencies = [], degrees = [], duration, 
   const envelope = createAdsrEnvelope(totalSamples, sampleRate, baseDuration, synth.envelope);
   const amplitude = 0.5 / Math.max(frequencies.length, 1);
 
-  frequencies.forEach((freq) => {
+  frequencies.forEach((baseFreq) => {
+    const detune = synth.detuneCents ? 2 ** (((Math.random() * 2 - 1) * synth.detuneCents) / 1200) : 1;
+    const freq = baseFreq * detune;
     let phase = 0;
     const phaseIncrement = (2 * Math.PI * freq) / sampleRate;
     for (let i = 0; i < totalSamples; i += 1) {

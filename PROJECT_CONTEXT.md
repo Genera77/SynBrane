@@ -8,9 +8,9 @@ The header includes a simple link to a dedicated About page (`/about.html`) with
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
   - Chords panel: up to five chord tabs, with the visible count controlled by a "Chords in loop" selector. Each chord stores its own tuning, root, notes, preset, and arpeggiator settings on a multi-octave spiral picker covering three visible octaves (0–2) for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`), spacing tuned for dense temperaments like 31-EDO, and temperament-specific color themes with subdued inactive bubbles and high-contrast highlighted selections. Preset chords (major, minor, dominant 7, suspended, add9/add11/add13, etc.) remap their target intervals to the currently selected temperament, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz). Each chord exposes an arpeggiator toggle, pattern (up/down/up-down/random), musical rate (1/4–1/16 with triplet eighths), and a preview loop toggle.
-  - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, filter settings, loop chord count, and loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments.
+  - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, filter settings, loop chord count, and loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments. Patch Save/Load and loop Play/Stop/Render controls sit together at the top of the panel for quick access, with synth sliders underneath.
   - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth/preview plus per-chord tuning, root, preset id, notes, arpeggiator settings, and the loop chord count. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
-  - Loop playback/render: builds a loop-length-limited (1–5 chords) sequence (one bar per visible chord) with explicit tuning ids, degree lists, arpeggiator settings, and derived frequencies and sends it to `/api/render`. Chord and loop preview buttons trigger immediate Web Audio playback in the browser using the active synth/filter/envelope settings. Loop preview repeats the chord set 10 times unless stopped, and renders request the backend to apply the same 10-loop sequence.
+  - Loop playback/render: builds a loop-length-limited (1–5 chords) sequence (one bar per visible chord) with explicit tuning ids, full degree lists, per-event arpeggiator settings (both structured and pattern/rate flags), and derived frequencies. The resulting payload is reused verbatim by both the Web Audio loop preview path and `/api/render`, so previews and renders share identical timing, synth/rhythm settings, and 10-loop length.
 
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
@@ -23,7 +23,7 @@ The header includes a simple link to a dedicated About page (`/about.html`) with
 
 - **Audio engines** (`server/audio/`)
   - `supercolliderClient.js` — writes small SuperCollider scripts and executes them via `sclang`. Provides `playRealtime` and `renderToFile` using SynthDefs for harmony and overtone-rich rhythm mapping.
-  - `engine.js` — Node DSP fallback synthesizing harmony voices with selectable waveforms, ADSR envelopes, optional resonant low-pass filter, and arpeggiated rendering based on per-event pattern/rate fields. Rhythm voices lock a four-on-the-floor kick with snares on beats 2 and 4, add steady hats, and map chord notes onto toms/claps/percussion on 4–16 step grids. Supports single-chord renders and multi-event sequences.
+  - `engine.js` — Node DSP fallback synthesizing harmony voices with selectable waveforms, ADSR envelopes, optional resonant low-pass filter, and arpeggiated rendering based on per-event pattern/rate fields. Rhythm voices lock a four-on-the-floor kick with snares on beats 2 and 4, add steady hats, and map chord notes onto toms/claps/percussion on 4–16 step grids. Harmony rendering honors detune cents per voice and arpeggiator timing to mirror the browser. Supports single-chord renders and multi-event sequences.
   - `index.js` — selects SuperCollider when `SUPER_COLLIDER_ENABLED=true`; otherwise uses the Node path and falls back automatically on errors.
 
 ## Audio behavior
@@ -73,7 +73,7 @@ The header includes a simple link to a dedicated About page (`/about.html`) with
   - `BASE_FREQUENCY` (default `440`)
   - `SCALES_DIR` (default `<repo>/scales`)
   - `RENDER_OUTPUT_DIR` (default `<repo>/renders`)
-  - `RENDER_SAMPLE_RATE` (default `44100`)
+  - `RENDER_SAMPLE_RATE` (minimum `44100`)
   - `SUPER_COLLIDER_ENABLED` (default `false`)
   - `SUPER_COLLIDER_SCLANG_PATH` (default `sclang`)
 
