@@ -95,7 +95,7 @@ const defaultSynth = {
     rhythmSpeed: 0.3,
     synth: JSON.parse(JSON.stringify(defaultSynth)),
     preview: { arpeggiate: false, arpRateMs: 180, loop: false },
-    loopPreview: { ctx: null, timer: null, stop: false },
+    loopPreview: { ctx: null, timer: null, stop: false, nodes: [] },
   };
 
   function clampRhythmSpeed(value) {
@@ -504,12 +504,24 @@ function chordToEvent(chord, index) {
 
 function getPreviewContext() {
   if (state.loopPreview.ctx) {
+    if (state.loopPreview.ctx.state === 'suspended') {
+      state.loopPreview.ctx.resume();
+    }
+    state.loopPreview.stop = false;
     return state.loopPreview.ctx;
   }
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   state.loopPreview.ctx = new AudioCtx();
+  state.loopPreview.nodes = [];
   state.loopPreview.stop = false;
   return state.loopPreview.ctx;
+}
+
+function trackPreviewNodes(...nodes) {
+  if (!state.loopPreview.nodes) state.loopPreview.nodes = [];
+  nodes.forEach((node) => {
+    if (node) state.loopPreview.nodes.push(node);
+  });
 }
 
 function applyEnvelope(gainNode, ctx, startTime, durationSec, envelope) {
@@ -559,6 +571,7 @@ function scheduleChordPreview(chord, startTime, durationSec) {
       filter.Q.setValueAtTime(resonance * 12 + 0.0001, startTime);
       lastNode.connect(filter);
       lastNode = filter;
+      trackPreviewNodes(filter);
     }
 
     const noteStart = startTime + idx * stepSec;
@@ -569,6 +582,7 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 
     osc.start(noteStart);
     osc.stop(noteStart + totalDuration + 0.05);
+    trackPreviewNodes(osc, gain);
   });
 
   const releaseSec = Math.max(0, (state.synth.envelope?.releaseMs || 0) / 1000);
@@ -597,23 +611,6 @@ function scheduleChordPreview(chord, startTime, durationSec) {
       }, (total + 0.2) * 1000);
 
       state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
-
-      const payload = {
-        tuningId: chord.tuningId,
-        chord: { id: `circle-${index}`, degrees: [...chord.notes] },
-        chordType: 'custom',
-        root: chord.root || 0,
-        frequencies: chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg)),
-        mode: state.mode,
-        bpm: state.bpm,
-        rhythmSpeed: state.rhythmSpeed,
-        synthSettings: { ...state.synth },
-      };
-      fetch(apiUrl('/api/play'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
     } catch (error) {
       updateStatus(error.message);
       // eslint-disable-next-line no-console
@@ -637,7 +634,6 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 async function playLoop() {
   try {
     stopPreview();
-    const payload = buildLoopPayload();
 
     const ctx = getPreviewContext();
     const beatsPerBar = 4;
@@ -660,12 +656,6 @@ async function playLoop() {
       (longest + 0.3) * 1000,
     );
     updateStatus('Loop previewing');
-
-    fetch(apiUrl('/api/play'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
   } catch (error) {
     updateStatus(error.message);
     // eslint-disable-next-line no-console
@@ -703,11 +693,32 @@ function stopPreview(reason) {
     clearTimeout(state.loopPreview.timer);
     state.loopPreview.timer = null;
   }
-  if (state.loopPreview.ctx) {
-    state.loopPreview.ctx.close();
-    state.loopPreview.ctx = null;
-  }
   state.loopPreview.stop = true;
+  if (state.loopPreview.nodes?.length) {
+    state.loopPreview.nodes.forEach((node) => {
+      if (!node) return;
+      try {
+        if (typeof node.stop === 'function') {
+          node.stop();
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+      }
+      try {
+        if (typeof node.disconnect === 'function') {
+          node.disconnect();
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+      }
+    });
+    state.loopPreview.nodes = [];
+  }
+  if (state.loopPreview.ctx && state.loopPreview.ctx.state === 'running') {
+    state.loopPreview.ctx.suspend();
+  }
   if (reason) updateStatus(reason);
 }
 
