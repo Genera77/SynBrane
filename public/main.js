@@ -85,8 +85,7 @@ const defaultSynth = {
   detuneCents: 3,
 };
 
-const MIN_OCTAVE_RING = -1;
-const MAX_OCTAVE_RING = 1;
+const VISIBLE_OCTAVES = 3;
 
 function defaultArp() {
   return { enabled: false, pattern: 'up', rate: '1/8' };
@@ -213,23 +212,25 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
   return Array.from(new Set(degrees)).sort((a, b) => a - b);
 }
 
-  function normalizeChordNotes(chord) {
-    const tuning = getTuning(chord.tuningId);
-    const span = getDegreeSpan(tuning);
-    const minDeg = MIN_OCTAVE_RING * span;
-    const maxDeg = (MAX_OCTAVE_RING + 1) * span - 1;
-    chord.arp = {
-      ...defaultArp(),
-      ...(chord.arp || {}),
-    };
-    chord.notes = (chord.notes || [])
-      .map((deg) => {
-        const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
-        return Math.max(minDeg, Math.min(safe, maxDeg));
-      });
-    if (!chord.notes.length) chord.notes = [];
-    return chord;
-  }
+function normalizeChordNotes(chord) {
+  const tuning = getTuning(chord.tuningId);
+  const span = getDegreeSpan(tuning);
+  const minDeg = 0;
+  const maxDeg = VISIBLE_OCTAVES * span - 1;
+  chord.arp = {
+    ...defaultArp(),
+    ...(chord.arp || {}),
+  };
+  chord.notes = (chord.notes || [])
+    .map((deg) => {
+      const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
+      return Math.max(minDeg, Math.min(safe, maxDeg));
+    })
+    .filter((deg, idx, arr) => arr.indexOf(deg) === idx)
+    .sort((a, b) => a - b);
+  if (!chord.notes.length) chord.notes = [];
+  return chord;
+}
 
 function renderChordSwitcher() {
   chordSwitcher.innerHTML = '';
@@ -327,88 +328,155 @@ function octaveColor(tuning, octave) {
   };
 }
 
-  function renderCircle() {
-    const chord = state.chords[state.activeChord];
-    normalizeChordNotes(chord);
-    const tuning = getTuning(chord.tuningId);
-    const span = getDegreeSpan(tuning);
-    noteCircle.innerHTML = '';
-    const minOctave = MIN_OCTAVE_RING;
-    const maxOctave = MAX_OCTAVE_RING;
-    const octaves = [];
-    for (let octave = minOctave; octave <= maxOctave; octave += 1) {
-      octaves.push(octave);
-    }
+const spiralState = {
+  tuningId: null,
+  span: 0,
+  width: 0,
+  height: 0,
+  pointSize: 0,
+  nodes: [],
+};
 
-    const ringCount = octaves.length;
-    const pointSize = span > 30 ? 15 : span > 22 ? 19 : span > 16 ? 22 : 28;
-    const densityBoost = span >= 30 ? 1.16 : span >= 24 ? 1.08 : 1.02;
-    const preferredBase = span >= 28 ? 380 : span >= 22 ? 360 : 340;
-    const preferredSize = Math.max(
-      preferredBase * densityBoost,
-      ringCount * (pointSize + 40)
-    );
-    const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
-    const circleSize = Math.min(preferredSize, Math.max(300, wrapSize - 12));
-    noteCircle.style.width = `${circleSize}px`;
-    noteCircle.style.height = `${circleSize}px`;
-    const center = circleSize / 2;
-    const maxRadius = center - pointSize / 2 - 8;
-    const innerRadius = Math.max(pointSize * 1.35, 34);
-    const ringSpacing = ringCount > 1 ? (maxRadius - innerRadius) / (ringCount - 1) : 0;
-    const spacingBoost = span >= 28 ? 5 : span >= 22 ? 3 : 0;
-    const twistPerRing = Math.PI / (span * 1.2);
-
-    octaves.forEach((octave, ringIndex) => {
-      const radius = Math.min(maxRadius, innerRadius + ringIndex * (ringSpacing + spacingBoost));
-      for (let degree = 0; degree < span; degree += 1) {
-        const baseAngle = (Math.PI * 2 * degree) / span - Math.PI / 2;
-        const angle = baseAngle + ringIndex * twistPerRing;
-        const x = center + radius * Math.cos(angle) - pointSize / 2;
-        const y = center + radius * Math.sin(angle) - pointSize / 2;
-        const absoluteDegree = degree + octave * span;
-        const palette = octaveColor(tuning, octave);
-        const isActive = chord.notes.includes(absoluteDegree);
-        const point = document.createElement('div');
-        point.className = 'note-point';
-        point.classList.add(isActive ? 'active' : 'muted');
-        point.style.width = `${pointSize}px`;
-        point.style.height = `${pointSize}px`;
-        point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, pointSize - 8)}px`;
-        point.style.lineHeight = `${pointSize}px`;
-        point.style.left = `${x}px`;
-        point.style.top = `${y}px`;
-        point.style.setProperty('--bubble-main', palette.main);
-        point.style.setProperty('--bubble-muted', palette.muted);
-        point.style.setProperty('--bubble-highlight', palette.highlight);
-        point.style.setProperty('--bubble-glow', palette.glow);
-        point.style.setProperty('--bubble-text', palette.text);
-        point.style.setProperty('--bubble-text-strong', palette.strongText);
-        point.style.setProperty('--bubble-shadow', palette.shadow);
-        point.style.setProperty('--bubble-outline', palette.outline);
-        point.style.background = isActive ? palette.highlight : palette.muted;
-        point.style.borderColor = isActive ? palette.outline : palette.mutedStroke;
-        point.style.color = isActive ? palette.strongText : palette.text;
-        point.style.opacity = isActive ? '1' : '0.6';
-        point.style.boxShadow = isActive
-          ? `0 0 0 2px ${palette.outline}, 0 0 14px ${palette.glow}, 0 12px 26px rgba(0, 0, 0, 0.55)`
-          : '0 2px 8px rgba(0, 0, 0, 0.32)';
-        point.textContent = degreeLabel(tuning, degree, chord.root || 0);
-        point.title = `Degree ${degree} (oct ${octave >= 0 ? `+${octave}` : octave})`;
-        point.onclick = () => {
-          if (chord.notes.includes(absoluteDegree)) {
-            chord.notes = chord.notes.filter((n) => n !== absoluteDegree);
-          } else {
-            chord.notes = [...chord.notes, absoluteDegree].sort((a, b) => a - b);
-          }
-          normalizeChordNotes(chord);
-          renderCircle();
-        };
-        noteCircle.appendChild(point);
-      }
-    });
-    renderIntervalPanels();
+function spiralThemeForTuning(tuning) {
+  if (!tuning?.id) return '';
+  if (tuning.type === 'edo') {
+    const map = {
+      12: 'edo-12',
+      19: 'edo-19',
+      22: 'edo-22',
+      24: 'edo-24',
+      31: 'edo-31',
+    };
+    return map[tuning.value] || 'edo-generic';
   }
+  return 'scala';
+}
+
+function setPointState(point, isActive) {
+  if (!point) return;
+  point.classList.toggle('active', isActive);
+  point.classList.toggle('muted', !isActive);
+}
+
+function updateSpiralActiveStates() {
+  const chord = state.chords[state.activeChord];
+  const noteSet = new Set(chord.notes || []);
+  spiralState.nodes.forEach((point) => {
+    const degreeIndex = Number(point.dataset.degreeIndex);
+    setPointState(point, noteSet.has(degreeIndex));
+  });
+  renderIntervalPanels();
+}
+
+function calculateSpiralSize(span) {
+  const pointSize = span >= 31 ? 13 : span >= 24 ? 15 : span >= 19 ? 17 : 22;
+  const densityBoost = span >= 28 ? 1.24 : span >= 22 ? 1.12 : 1.04;
+  const preferredBase = span >= 28 ? 420 : span >= 22 ? 380 : 340;
+  const preferredSize = preferredBase * densityBoost;
+  const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
+  const circleSize = Math.max(300, Math.min(preferredSize, wrapSize - 8));
+  return { pointSize, circleSize };
+}
+
+function buildSpiral(tuning) {
+  const span = getDegreeSpan(tuning);
+  const chord = state.chords[state.activeChord];
+  const { pointSize, circleSize } = calculateSpiralSize(span);
+  noteCircle.style.width = `${circleSize}px`;
+  noteCircle.style.height = `${circleSize}px`;
+  noteCircle.dataset.tuningId = tuning?.id || '';
+
+  const circleWidth = noteCircle.clientWidth || circleSize;
+  const circleHeight = noteCircle.clientHeight || circleSize;
+  const totalPoints = span * VISIBLE_OCTAVES;
+  const maxRadius = Math.min(circleWidth, circleHeight) / 2 - Math.max(pointSize * 0.6, 10);
+  const centerX = circleWidth / 2;
+  const centerY = circleHeight / 2;
+  const innerRadius = maxRadius * 0.25;
+  const outerRadius = maxRadius * 0.9;
+  const turns = 2.5;
+
+  noteCircle.innerHTML = '';
+  spiralState.nodes = [];
+  const fragment = document.createDocumentFragment();
+
+  for (let j = 0; j < totalPoints; j += 1) {
+    const t = totalPoints > 1 ? j / (totalPoints - 1) : 0;
+    const angle = -Math.PI / 2 + turns * 2 * Math.PI * t;
+    const radius = innerRadius + (outerRadius - innerRadius) * t;
+    const x = centerX + radius * Math.cos(angle);
+    const y = centerY + radius * Math.sin(angle);
+    const octaveIndex = Math.floor(j / span);
+    const degreeInOctave = j % span;
+    const degreeIndex = octaveIndex * span + degreeInOctave;
+    const palette = octaveColor(tuning, octaveIndex);
+    const point = document.createElement('div');
+    point.className = 'note-point muted';
+    point.dataset.degreeIndex = degreeIndex;
+    point.style.width = `${pointSize}px`;
+    point.style.height = `${pointSize}px`;
+    point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, pointSize - 10)}px`;
+    point.style.setProperty('--bubble-main', palette.main);
+    point.style.setProperty('--bubble-muted', palette.muted);
+    point.style.setProperty('--bubble-highlight', palette.highlight);
+    point.style.setProperty('--bubble-glow', palette.glow);
+    point.style.setProperty('--bubble-text', palette.text);
+    point.style.setProperty('--bubble-text-strong', palette.strongText);
+    point.style.setProperty('--bubble-shadow', palette.shadow);
+    point.style.setProperty('--bubble-outline', palette.outline);
+    point.style.setProperty('--note-transform', `translate(${x}px, ${y}px) translate(-50%, -50%)`);
+    point.title = `Degree ${degreeInOctave} (oct +${octaveIndex})`;
+    point.textContent = degreeLabel(tuning, degreeInOctave, chord.root || 0);
+    point.onclick = () => {
+      const activeChord = state.chords[state.activeChord];
+      if (activeChord.notes.includes(degreeIndex)) {
+        activeChord.notes = activeChord.notes.filter((n) => n !== degreeIndex);
+      } else {
+        activeChord.notes = [...activeChord.notes, degreeIndex].sort((a, b) => a - b);
+      }
+      normalizeChordNotes(activeChord);
+      updateSpiralActiveStates();
+    };
+    fragment.appendChild(point);
+    spiralState.nodes.push(point);
+  }
+
+  noteCircle.appendChild(fragment);
+  spiralState.tuningId = tuning?.id || null;
+  spiralState.span = span;
+  spiralState.width = circleWidth;
+  spiralState.height = circleHeight;
+  spiralState.pointSize = pointSize;
+}
+
+function spiralNeedsRebuild(tuning) {
+  const span = getDegreeSpan(tuning);
+  const { pointSize, circleSize } = calculateSpiralSize(span);
+  return (
+    spiralState.tuningId !== (tuning?.id || null) ||
+    spiralState.span !== span ||
+    spiralState.pointSize !== pointSize ||
+    Math.abs(spiralState.width - circleSize) > 2 ||
+    Math.abs(spiralState.height - circleSize) > 2
+  );
+}
+
+function renderCircle() {
+  const chord = state.chords[state.activeChord];
+  normalizeChordNotes(chord);
+  const tuning = getTuning(chord.tuningId);
+  const span = getDegreeSpan(tuning);
+  const theme = spiralThemeForTuning(tuning);
+  noteCircle.dataset.theme = theme;
+  if (spiralNeedsRebuild(tuning)) {
+    buildSpiral(tuning);
+  }
+  spiralState.nodes.forEach((point) => {
+    const degreeInOctave = Number(point.dataset.degreeIndex) % span;
+    point.textContent = degreeLabel(tuning, degreeInOctave, chord.root || 0);
+  });
+  updateSpiralActiveStates();
+}
 
 function intervalLabelByIndex(idx) {
   const labels = ['Root', '2nd', '3rd', '4th', '5th', '6th', '7th', '9th', '11th', '13th'];
@@ -418,19 +486,18 @@ function intervalLabelByIndex(idx) {
 function renderIntervalPanels() {
   const chord = state.chords[state.activeChord];
   const tuning = getTuning(chord.tuningId);
-  const span = getDegreeSpan(tuning);
-    const sorted = [...(chord.notes || [])].sort((a, b) => a - b);
-    const infoLines = [];
-    const freqLines = [];
-    sorted.forEach((degree, idx) => {
-      const offset = degree - (chord.root || 0);
-      const cents = centsForDegree(tuning, offset);
-      const label = degreeLabel(tuning, degree, chord.root || 0);
-      const name = intervalLabelByIndex(idx);
-      infoLines.push(`${name}: ${label} (${cents.toFixed(1)}¢ from root)`);
-      const freq = degreeToFrequency(chord.tuningId, degree).toFixed(2);
-      const steps = tuning?.type === 'edo' ? `${offset} steps` : `${offset}°`;
-      freqLines.push(`${label}: ${freq} Hz (${steps})`);
+  const sorted = [...(chord.notes || [])].sort((a, b) => a - b);
+  const infoLines = [];
+  const freqLines = [];
+  sorted.forEach((degree, idx) => {
+    const offset = degree - (chord.root || 0);
+    const cents = centsForDegree(tuning, offset);
+    const label = degreeLabel(tuning, degree, chord.root || 0);
+    const name = intervalLabelByIndex(idx);
+    infoLines.push(`${name}: ${label} (${cents.toFixed(1)}¢ from root)`);
+    const freq = degreeToFrequency(chord.tuningId, degree).toFixed(2);
+    const steps = tuning?.type === 'edo' ? `${offset} steps` : `${offset}°`;
+    freqLines.push(`${label}: ${freq} Hz (${steps})`);
   });
   intervalInfo.textContent = infoLines.join('\n') || 'Pick notes to see intervals.';
   frequencyInfo.textContent = freqLines.join('\n') || 'Frequencies will appear here.';
