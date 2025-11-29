@@ -28,18 +28,19 @@
     </header>
 
     <main>
-      <section class="content-card">
+      <section class="content-card centered">
         <div class="section-header">
           <p class="meta">About</p>
-          <h1>SynBrane</h1>
+          <h1>About SynBrane</h1>
         </div>
+
         <p>
-          SynBrane is an experimental sound engine designed to merge tuning theory, chord building, and rhythm
-          generation into a single creative tool.
+          SynBrane is an experimental sound engine built to merge tuning theory, chord building, and rhythm generation into a
+          single creative tool.
         </p>
         <p>
-          You sculpt chords using a spiraling circular interface tuned to any temperament — 12-EDO, 19-EDO, 24-EDO,
-          31-EDO, 8-EDO, or any Scala tuning — and hear them instantly as harmony or as rhythm.
+          You sculpt chords using a spiraling circular interface tuned to any temperament — 12-EDO, 19-EDO, 24-EDO, 31-EDO,
+          8-EDO, or any Scala tuning — and hear them instantly as either harmony or rhythm.
         </p>
 
         <h2>Harmony Mode</h2>
@@ -52,38 +53,49 @@
           <li>Add arpeggiators per chord</li>
           <li>Preview chords or render full loops from the backend</li>
         </ul>
-        <p>Harmony Mode acts like a microtonal chord workstation — but built around your tuning rather than a keyboard.</p>
-
-        <h2>Rhythm Mode — Turning a chord into a beat</h2>
-        <p>Rhythm Mode transforms your chord into a drum pattern.</p>
         <p>
-          Instead of playing pitches, each note you select becomes a percussive voice, and the chord’s structure becomes
-          a timing model.
+          Harmony Mode acts like a microtonal chord workstation, but built around your tuning system rather than a piano
+          keyboard.
         </p>
 
-        <h3>Here’s exactly how it works:</h3>
+        <h2>Rhythm Mode — Turning a Chord Into a Beat</h2>
+        <p>Rhythm Mode transforms your chord into a polyrhythmic drum machine driven by harmonic ratios.</p>
+        <p>
+          Instead of playing pitches, each note becomes a percussive instrument, and the chord’s internal interval structure
+          becomes a rhythmic engine. You’re not just triggering drums — you’re literally slowing the chord down into sub-audio
+          timing, then using those long harmonic cycles to generate pulse patterns.
+        </p>
+
+        <h3>How it works:</h3>
         <ul>
           <li>Each selected degree becomes a trigger point.</li>
-          <li>The degree is normalized to a fraction of one bar based on the tuning size.</li>
+          <li>A note’s degree is normalized to a fractional position inside one bar, based on the size of the temperament.</li>
         </ul>
-        <p>The Rhythm × slider slows everything down.</p>
+
+        <p>The Rhythm × slider slows everything down:</p>
         <ul>
-          <li>1.00× = normal timing</li>
-          <li>0.30× = ~3× slower (default)</li>
-          <li>0.10× = ~10× slower (deep, slow pulses)</li>
+          <li>1.00× → normal timing</li>
+          <li>0.30× → ~3× slower (default)</li>
+          <li>0.10× → ~10× slower (deep pulses and long polyrhythmic spacing)</li>
         </ul>
-        <p>This creates long, breathing rhythmic structures.</p>
-        <p>Each degree maps to a drum type.</p>
+        <p>This reveals the underlying ratios of the chord as rhythmic shapes.</p>
+
+        <p>Degrees map to drum types:</p>
         <ul>
           <li>Lower degrees → low drums</li>
-          <li>Mid degrees → claps / snares</li>
-          <li>High degrees → hats / ticks</li>
+          <li>Middle degrees → claps / snares</li>
+          <li>Higher degrees → hats / ticks</li>
         </ul>
-        <p>Kick + Snare backbone stays locked.</p>
-        <p>Kick on beats 1/3, snare on 2/4.</p>
+
+        <p>Kick + Snare backbone stays locked:</p>
+        <ul>
+          <li>Kick on beats 1 and 3</li>
+          <li>Snare on 2 and 4</li>
+        </ul>
+
         <p>The full chord becomes a rhythmic texture.</p>
         <p>
-          Every note fires at a slowed-down position in the bar, creating grooves that depend entirely on:
+          Each note fires at its slowed-down position in the bar, creating a groove determined entirely by:
         </p>
         <ul>
           <li>temperament structure</li>
@@ -91,27 +103,30 @@
           <li>rhythmic slowdown</li>
           <li>tempo</li>
         </ul>
-        <p>Rhythm Mode essentially asks:</p>
-        <p>“What if your chord was your beat?”</p>
+        <p>
+          This produces complex polyrhythms generated directly from harmonic relationships — something impossible in a
+          traditional DAW quantized to 16th notes.
+        </p>
+        <p>Rhythm Mode essentially asks:<br />“What if your chord was your beat?”</p>
 
         <h2>Looping &amp; Composition</h2>
         <ul>
           <li>Choose between 1 and 5 chords</li>
           <li>Each chord has its own tuning, notes, root, preset, and arpeggiator</li>
           <li>Loops repeat 10 times or until stopped</li>
-          <li>Preview the loop in-browser or render a WAV through the backend</li>
+          <li>Preview loops in the browser or render a WAV through the backend</li>
         </ul>
-        <p>SynBrane works like a microtonal groovebox for harmonic and rhythmic exploration.</p>
+        <p>SynBrane functions as a microtonal groovebox for harmonic and rhythmic experimentation.</p>
 
         <h2>Patch System</h2>
-        <p>Save or load full patches as JSON containing:</p>
+        <p>Save or load complete patches as JSON containing:</p>
         <ul>
           <li>Global synth settings</li>
           <li>Tempo and rhythm multiplier</li>
           <li>Loop chord count</li>
           <li>All chord notes, tunings, roots, presets, and arpeggiators</li>
         </ul>
-        <p>Patches behave like portable “scenes” you can reload anytime.</p>
+        <p>Patches behave like portable “scenes” you can reload at any time.</p>
 
         <h2>Tuning Exploration</h2>
         <p>SynBrane supports:</p>
@@ -125,8 +140,8 @@
           <li>Any Scala tuning</li>
         </ul>
         <p>
-          The spiral redraws for each system, showing you the structure of the tuning and giving you a direct way to hear
-          the tuning’s interval relationships — both as harmony and as rhythm.
+          The spiral redraws for each system, allowing you to see and hear the tuning’s interval structure — as harmony or
+          rhythm.
         </p>
       </section>
     </main>
