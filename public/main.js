@@ -29,10 +29,6 @@ const assignChordBtn = document.getElementById('assignChordBtn');
 const stopLoopBtn = document.getElementById('stopLoopBtn');
 const customChordEditor = document.getElementById('customChordEditor');
 const customChordSummary = document.getElementById('customChordSummary');
-const patchNameInput = document.getElementById('patchName');
-const savePatchBtn = document.getElementById('savePatchBtn');
-const loadPatchBtn = document.getElementById('loadPatchBtn');
-const patchList = document.getElementById('patchList');
 
 function createDefaultCustomChord() {
   return {
@@ -40,12 +36,9 @@ function createDefaultCustomChord() {
       enabled: index === 0,
       degree: 0,
       octave: 0,
-      muted: false,
     })),
   };
 }
-
-const PATCH_STORAGE_KEY = 'synbrane_patches';
 
 function createDefaultArpeggio() {
   return {
@@ -82,8 +75,6 @@ const state = {
       resonance: 0.2,
     },
   },
-  patches: [],
-  patchName: 'My Patch',
 };
 
 const ARPEGGIO_PATTERNS = [
@@ -104,183 +95,6 @@ const loopPreview = {
   loops: 0,
   stopRequested: false,
 };
-
-function loadStoredPatches() {
-  try {
-    const stored = localStorage.getItem(PATCH_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    if (Array.isArray(parsed)) return parsed;
-    return [];
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('Unable to parse patches from storage', err);
-    return [];
-  }
-}
-
-function persistPatches(patches) {
-  state.patches = patches;
-  try {
-    localStorage.setItem(PATCH_STORAGE_KEY, JSON.stringify(patches));
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('Unable to persist patches', err);
-  }
-}
-
-function syncPatchControls() {
-  if (patchNameInput) {
-    patchNameInput.value = state.patchName;
-  }
-  if (patchList) {
-    patchList.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = 'Load saved patch…';
-    patchList.appendChild(placeholder);
-    state.patches.forEach((patch) => {
-      const option = document.createElement('option');
-      option.value = patch.name;
-      option.textContent = patch.name;
-      patchList.appendChild(option);
-    });
-  }
-}
-
-function capturePatchPayload() {
-  const name = (patchNameInput?.value || state.patchName || 'My Patch').trim() || 'My Patch';
-  state.patchName = name;
-  const bars = state.bars.map((bar) => ({
-    ...bar,
-    customChord: cloneCustomChord(bar.customChord || ensureBarCustomChord(bar)),
-  }));
-  return {
-    name,
-    payload: {
-      mode: state.mode,
-      bpm: state.bpm,
-      rhythmSpeed: state.rhythmSpeed,
-      synth: state.synth,
-      chordSource: state.chordSource,
-      selectedTuningId: state.selectedTuningId,
-      selectedRoot: state.selectedRoot,
-      selectedChordId: state.selectedChordId,
-      customChord: cloneCustomChord(),
-      bars,
-    },
-  };
-}
-
-async function applyPatchPayload(entry) {
-  const payload = entry?.payload || entry;
-  if (!payload) return;
-  state.patchName = entry?.name || payload.name || state.patchName;
-
-  const tuningIds = new Set();
-  if (payload.selectedTuningId) tuningIds.add(payload.selectedTuningId);
-  (payload.bars || []).forEach((bar) => {
-    if (bar?.tuningId) tuningIds.add(bar.tuningId);
-  });
-  // ensure chord data for every tuning used in the patch
-  // eslint-disable-next-line no-restricted-syntax
-  for (const tuningId of tuningIds) {
-    // eslint-disable-next-line no-await-in-loop
-    await ensureChords(tuningId);
-  }
-
-  const fallbackTuning = state.tunings.find((t) => t.id === payload.selectedTuningId) ? payload.selectedTuningId : state.tunings[0]?.id;
-  state.selectedTuningId = fallbackTuning;
-  state.selectedRoot = payload.selectedRoot ?? state.selectedRoot;
-  state.selectedChordId = payload.selectedChordId ?? state.selectedChordId;
-  state.chordSource = payload.chordSource || state.chordSource;
-  state.mode = payload.mode || state.mode;
-  state.bpm = Number(payload.bpm ?? state.bpm);
-  state.rhythmSpeed = Number(payload.rhythmSpeed ?? state.rhythmSpeed);
-
-  const synth = payload.synth || payload.synthSettings || {};
-  state.synth = {
-    ...state.synth,
-    ...synth,
-    envelope: { ...state.synth.envelope, ...(synth.envelope || {}) },
-    filter: { ...state.synth.filter, ...(synth.filter || {}) },
-  };
-
-  const bars = (payload.bars && payload.bars.length ? payload.bars : state.bars).slice(0, 4);
-  state.bars = bars.map((bar, index) => {
-    const tuningId = state.tunings.find((t) => t.id === bar.tuningId)?.id || state.selectedTuningId;
-    const chords = state.chordsByTuning[tuningId]?.chords || [];
-    const normalizedCustom = normalizeCustomChordForTuning(bar.customChord || createDefaultCustomChord(), getTuning(tuningId));
-    const chordType = bar.chordType || 'preset';
-    let chordId = bar.chordId;
-    if (chordType === 'preset' && chordId && !chords.find((c) => c.id === chordId)) {
-      chordId = chords[0]?.id || null;
-    }
-    return {
-      bar: index,
-      tuningId,
-      root: Number(bar.root || 0),
-      chordId,
-      chordType,
-      customChord: normalizedCustom,
-      arpeggioEnabled: bar.arpeggioEnabled ?? bar.arpeggio?.enabled ?? false,
-      arpeggioPattern: bar.arpeggioPattern || bar.arpeggio?.pattern || 'up',
-      arpeggioRate: bar.arpeggioRate || bar.arpeggio?.rate || '1/8',
-    };
-  });
-  state.customChord = normalizeCustomChordForTuning(payload.customChord || state.customChord, getTuning(state.selectedTuningId));
-  state.selectedBar = 0;
-
-  if (!state.selectedChordId && state.chordsByTuning[state.selectedTuningId]?.chords?.length) {
-    state.selectedChordId = state.chordsByTuning[state.selectedTuningId].chords[0].id;
-  }
-
-  syncPatchControls();
-  renderTunings();
-  renderRoots();
-  renderChords();
-  renderCustomChordEditor();
-  renderBars();
-  syncSynthControls();
-  updateSynthLabels();
-  if (modeSelect) modeSelect.value = state.mode;
-  bpmInput.value = state.bpm;
-  bpmLabel.textContent = `${state.bpm} BPM`;
-  rhythmSpeedInput.value = state.rhythmSpeed;
-  rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(2)}× pitch → beat`;
-  chordSourceSelect.value = state.chordSource;
-  updateSelectedBarLabel();
-}
-
-function hydratePatches() {
-  state.patches = loadStoredPatches();
-  syncPatchControls();
-}
-
-function saveCurrentPatch() {
-  const entry = capturePatchPayload();
-  const patches = [...state.patches];
-  const existing = patches.findIndex((p) => p.name === entry.name);
-  if (existing >= 0) {
-    patches[existing] = entry;
-  } else {
-    patches.push(entry);
-  }
-  persistPatches(patches);
-  syncPatchControls();
-  updateStatus(`Saved patch "${entry.name}" to local storage.`);
-}
-
-async function loadSelectedPatch() {
-  const name = patchList?.value;
-  const entry = state.patches.find((p) => p.name === name);
-  if (!entry) {
-    updateStatus('Select a saved patch to load.');
-    return;
-  }
-  await applyPatchPayload(entry);
-  updateStatus(`Loaded patch "${entry.name}".`);
-}
 
 function updateStatus(text) {
   statusEl.textContent = text;
@@ -345,7 +159,6 @@ function normalizeCustomChordForTuning(customChord, tuning) {
         ...slot,
         degree: clamped % span,
         octave: Math.floor(clamped / span),
-        muted: Boolean(slot.muted),
       };
     }),
   };
@@ -365,12 +178,6 @@ function ensureBarCustomChord(bar) {
     // eslint-disable-next-line no-param-reassign
     bar.customChord = createDefaultCustomChord();
   }
-  bar.customChord.slots = (bar.customChord.slots || []).map((slot) => ({
-    enabled: slot.enabled,
-    degree: Number(slot.degree || 0),
-    octave: Number(slot.octave || 0),
-    muted: Boolean(slot.muted),
-  }));
   return bar.customChord;
 }
 
@@ -385,7 +192,7 @@ function ensureBarArpeggio(bar) {
 function resolveCustomChord(tuningId, root, customChord = state.customChord) {
   const tuning = getTuning(tuningId);
   const span = getDegreeSpan(tuning);
-  const activeSlots = (customChord?.slots || []).filter((slot) => slot.enabled && !slot.muted);
+  const activeSlots = (customChord?.slots || []).filter((slot) => slot.enabled);
   const degrees = activeSlots.map((slot) => Number(slot.degree || 0) + Number(root || 0) + span * Number(slot.octave || 0));
   const frequencies = degrees.map((degree) => degreeToFrequency(tuningId, degree));
   return { degrees, frequencies, activeSlots, span, tuning };
@@ -420,51 +227,26 @@ function renderCustomChordEditor() {
 
   cloneCustomChordSlots().forEach((slot, index) => {
     const slotEl = document.createElement('div');
-    slotEl.className = `custom-slot ${slot.muted ? 'muted-slot' : ''}`;
+    slotEl.className = 'custom-slot';
 
     const header = document.createElement('header');
     const title = document.createElement('span');
     title.textContent = `Slot ${index + 1}`;
-    const headerButtons = document.createElement('div');
-    headerButtons.className = 'slot-toggles';
-
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
     toggle.checked = slot.enabled;
-    toggle.title = 'Enable/disable note';
-
-    const muteBtn = document.createElement('button');
-    muteBtn.type = 'button';
-    muteBtn.className = `mute-btn ${slot.muted ? 'muted' : ''}`;
-    const updateMuteText = () => {
-      muteBtn.textContent = slot.muted ? '🔇' : '🔊';
-      muteBtn.title = slot.muted ? 'Unmute note' : 'Mute note';
-      slotEl.className = `custom-slot ${slot.muted ? 'muted-slot' : ''}`;
-    };
-    updateMuteText();
-
     const noteLabel = document.createElement('div');
     noteLabel.className = 'note-label';
     const slotLabelUpdate = () => {
       const slotState = state.customChord.slots[index];
-      const slotInfo = resolveCustomChord(state.selectedTuningId, state.selectedRoot, {
-        slots: [{ ...slotState, enabled: slotState.enabled, muted: slotState.muted }],
-      });
+      const slotInfo = resolveCustomChord(state.selectedTuningId, state.selectedRoot, { slots: [{ ...slotState, enabled: slotState.enabled }] });
       const freq = slotInfo.frequencies[0];
       const baseLabel = degreeLabel(tuning, Number(slotState.degree || 0));
       const octaveText = slotState.octave === 0 ? '' : `${slotState.octave > 0 ? '+' : ''}${slotState.octave} oct`;
-      if (!slotState.enabled) {
-        noteLabel.textContent = 'Disabled';
-        return;
-      }
-      if (slotState.muted) {
-        noteLabel.textContent = `${baseLabel}${octaveText ? ` (${octaveText})` : ''} · Muted`;
-        return;
-      }
-      if (Number.isFinite(freq)) {
+      if (slotState.enabled && Number.isFinite(freq)) {
         noteLabel.textContent = `${baseLabel}${octaveText ? ` (${octaveText})` : ''} ≈ ${freq.toFixed(2)} Hz`;
       } else {
-        noteLabel.textContent = baseLabel;
+        noteLabel.textContent = 'Disabled';
       }
     };
     toggle.onchange = (e) => {
@@ -472,19 +254,8 @@ function renderCustomChordEditor() {
       slotLabelUpdate();
       updateCustomChordSummary();
     };
-
-    muteBtn.onclick = () => {
-      state.customChord.slots[index].muted = !state.customChord.slots[index].muted;
-      slot.muted = state.customChord.slots[index].muted;
-      updateMuteText();
-      slotLabelUpdate();
-      updateCustomChordSummary();
-    };
-
-    headerButtons.appendChild(toggle);
-    headerButtons.appendChild(muteBtn);
     header.appendChild(title);
-    header.appendChild(headerButtons);
+    header.appendChild(toggle);
     slotEl.appendChild(header);
 
     const controls = document.createElement('div');
@@ -535,7 +306,6 @@ function renderCustomChordEditor() {
 
   updateCustomChordSummary();
 }
-
 
 function hasActiveCustomNotes() {
   const { activeSlots } = resolveCustomChord(state.selectedTuningId, state.selectedRoot);
@@ -724,22 +494,9 @@ function renderBars() {
       renderBars();
       updateSelectedBarLabel();
     };
-    const titleRow = document.createElement('div');
-    titleRow.className = 'bar-header-row';
     const title = document.createElement('h3');
     title.textContent = `Bar ${bar.bar + 1}`;
-    const previewChordBtn = document.createElement('button');
-    previewChordBtn.type = 'button';
-    previewChordBtn.className = 'preview-btn chord-preview';
-    previewChordBtn.title = 'Preview this bar';
-    previewChordBtn.textContent = '▶︎';
-    previewChordBtn.onclick = (e) => {
-      e.stopPropagation();
-      previewBarChord(bar.bar);
-    };
-    titleRow.appendChild(title);
-    titleRow.appendChild(previewChordBtn);
-    card.appendChild(titleRow);
+    card.appendChild(title);
 
     const tuningLabel = document.createElement('label');
     tuningLabel.textContent = 'Tuning';
@@ -914,7 +671,7 @@ function createBarCustomEditor(bar, chordTypeSelect) {
   title.textContent = 'Custom chord (this bar)';
   const meta = document.createElement('p');
   meta.className = 'meta';
-  meta.textContent = 'Toggle, mute, or retune any voice without losing its note choice.';
+  meta.textContent = 'Enable notes and pick degrees from this bar\'s tuning. Two-octave span shown when available.';
   titleWrap.appendChild(title);
   titleWrap.appendChild(meta);
   const summary = document.createElement('div');
@@ -933,7 +690,7 @@ function createBarCustomEditor(bar, chordTypeSelect) {
 
   customChord.slots.forEach((slot, index) => {
     const slotEl = document.createElement('div');
-    slotEl.className = `custom-slot custom-slot--bar ${slot.muted ? 'muted-slot' : ''}`;
+    slotEl.className = 'custom-slot custom-slot--bar';
 
     const slotHeader = document.createElement('header');
     slotHeader.className = 'bar-slot-header';
@@ -944,17 +701,12 @@ function createBarCustomEditor(bar, chordTypeSelect) {
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
     toggle.checked = slot.enabled;
-    toggle.title = 'Enable/disable note';
-
-    const muteBtn = document.createElement('button');
-    muteBtn.type = 'button';
-    muteBtn.className = `mute-btn ${slot.muted ? 'muted' : ''}`;
-
     const previewBtn = document.createElement('button');
     previewBtn.type = 'button';
     previewBtn.className = 'preview-btn';
     previewBtn.textContent = '🔊';
     previewBtn.title = 'Preview this note';
+    previewBtn.disabled = !slot.enabled;
 
     const persistSlot = (updates) => {
       const currentBar = state.bars[bar.bar];
@@ -971,23 +723,8 @@ function createBarCustomEditor(bar, chordTypeSelect) {
       updateSelectedBarLabel();
     };
 
-    const updateVisualState = (next) => {
-      const current = next || state.bars[bar.bar].customChord.slots[index];
-      const isMuted = current.muted;
-      slotEl.className = `custom-slot custom-slot--bar ${isMuted ? 'muted-slot' : ''}`;
-      muteBtn.className = `mute-btn ${isMuted ? 'muted' : ''}`;
-      muteBtn.textContent = isMuted ? '🔇' : '🔊';
-      muteBtn.title = isMuted ? 'Unmute note' : 'Mute note';
-      previewBtn.disabled = isMuted || !current.enabled;
-    };
-
     toggle.onchange = (e) => {
       persistSlot({ enabled: e.target.checked });
-    };
-
-    muteBtn.onclick = (e) => {
-      e.stopPropagation();
-      persistSlot({ muted: !slot.muted });
     };
 
     previewBtn.onclick = (e) => {
@@ -996,13 +733,11 @@ function createBarCustomEditor(bar, chordTypeSelect) {
       const spanValue = getDegreeSpan(getTuning(current.tuningId));
       const currentChord = ensureBarCustomChord(current);
       const slotState = currentChord.slots[index];
-      if (!slotState.enabled || slotState.muted) return;
       const combined = combinedDegreeValue(slotState, spanValue);
       playNotePreview(current.tuningId, current.root, combined);
     };
 
     controls.appendChild(toggle);
-    controls.appendChild(muteBtn);
     controls.appendChild(previewBtn);
     slotHeader.appendChild(slotTitle);
     slotHeader.appendChild(controls);
@@ -1035,13 +770,9 @@ function createBarCustomEditor(bar, chordTypeSelect) {
       const current = state.bars[bar.bar];
       const currentChord = ensureBarCustomChord(current);
       const slotState = currentChord.slots[index];
-      updateVisualState(slotState);
       if (!slotState.enabled) {
         slotMeta.textContent = 'Disabled';
-        return;
-      }
-      if (slotState.muted) {
-        slotMeta.textContent = 'Muted';
+        previewBtn.disabled = true;
         return;
       }
       const combo = combinedDegreeValue(slotState, span);
@@ -1051,6 +782,7 @@ function createBarCustomEditor(bar, chordTypeSelect) {
       slotMeta.textContent = Number.isFinite(freq)
         ? `${baseLabel}${octaveText ? ` (${octaveText})` : ''} ≈ ${freq.toFixed(2)} Hz`
         : `${baseLabel}${octaveText ? ` (${octaveText})` : ''}`;
+      previewBtn.disabled = false;
     };
     updateMeta();
 
@@ -1063,7 +795,6 @@ function createBarCustomEditor(bar, chordTypeSelect) {
   wrapper.appendChild(slots);
   return wrapper;
 }
-
 
 function degreeToFrequency(tuningId, degree) {
   const tuning = getTuning(tuningId);
@@ -1274,14 +1005,6 @@ function arpeggioCycle(freqs, pattern) {
   return [...freqs];
 }
 
-function eventArpeggio(event) {
-  if (event?.arpeggio?.enabled) return event.arpeggio;
-  if (event?.arpeggioEnabled) {
-    return { enabled: true, pattern: event.arpeggioPattern, rate: event.arpeggioRate };
-  }
-  return null;
-}
-
 function scheduleHarmonyArpeggio(ctx, startTime, duration, freqs, synthSettings, arpeggio) {
   const stepDuration = arpeggioStepSeconds(arpeggio?.rate || '1/8');
   const cycle = arpeggioCycle(freqs, arpeggio?.pattern || 'up');
@@ -1315,20 +1038,21 @@ function playNotePreview(tuningId, root, degreeValue) {
 function playChordPreview(event) {
   const ctx = new AudioContext();
   const start = ctx.currentTime + 0.05;
-  const duration = Math.min(1.5, Math.max(0.5, (60 / state.bpm) * 2));
+  const duration = (60 / state.bpm) * 4;
   const freqs = frequenciesForEvent(event);
   if (!freqs.length) return;
   if (state.mode === 'rhythm') {
     scheduleRhythm(ctx, start, duration, freqs);
   } else {
-    const arpeggio = eventArpeggio(event);
+    const arpeggio = event?.arpeggioEnabled
+      ? { enabled: true, pattern: event.arpeggioPattern, rate: event.arpeggioRate }
+      : null;
     if (arpeggio?.enabled) {
       scheduleHarmonyArpeggio(ctx, start, duration, freqs, state.synth, arpeggio);
     } else {
       scheduleHarmony(ctx, start, duration, freqs, state.synth);
     }
   }
-  setTimeout(() => ctx.close(), (duration + 1) * 1000);
 }
 
 function playSequenceOnce(ctx, startTime, barDuration, events) {
@@ -1338,7 +1062,9 @@ function playSequenceOnce(ctx, startTime, barDuration, events) {
     if (state.mode === 'rhythm') {
       scheduleRhythm(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
     } else {
-      const arpeggio = eventArpeggio(event);
+      const arpeggio = event?.arpeggioEnabled
+        ? { enabled: true, pattern: event.arpeggioPattern, rate: event.arpeggioRate }
+        : null;
       const duration = barDuration * (event.durationBars || 1);
       if (arpeggio?.enabled) {
         scheduleHarmonyArpeggio(ctx, eventStart, duration, freqs, state.synth, arpeggio);
@@ -1404,33 +1130,6 @@ function buildCustomChordEvent(tuningId, root, customChord = state.customChord) 
   };
 }
 
-function buildBarEvent(bar) {
-  if (!bar) return null;
-  const arpeggio = ensureBarArpeggio(bar);
-  const base = {
-    bar: bar.bar,
-    durationBars: 1,
-    tuningId: bar.tuningId,
-    root: Number(bar.root || 0),
-    arpeggioEnabled: arpeggio.enabled,
-    arpeggioPattern: arpeggio.pattern,
-    arpeggioRate: arpeggio.rate,
-    arpeggio,
-  };
-  if ((bar.chordType || 'preset') === 'custom') {
-    return { ...base, ...buildCustomChordEvent(bar.tuningId, bar.root, bar.customChord || createDefaultCustomChord()) };
-  }
-  const chord = getChord(bar.tuningId, bar.chordId);
-  if (!chord) return null;
-  return {
-    ...base,
-    chordType: 'preset',
-    chord,
-    chordId: bar.chordId,
-    frequencies: chord.degrees.map((degree) => degreeToFrequency(bar.tuningId, degree + Number(bar.root || 0))),
-  };
-}
-
 function buildChordPayload() {
   if (state.chordSource === 'custom') {
     if (!hasActiveCustomNotes()) return null;
@@ -1460,7 +1159,32 @@ function buildChordPayload() {
 }
 
 function buildLoopPayload() {
-  const sequence = state.bars.map((bar) => buildBarEvent(bar)).filter(Boolean);
+  const sequence = state.bars
+    .map((bar) => {
+      const arpeggio = ensureBarArpeggio(bar);
+      const base = {
+        bar: bar.bar,
+        durationBars: 1,
+        tuningId: bar.tuningId,
+        root: Number(bar.root || 0),
+        arpeggioEnabled: arpeggio.enabled,
+        arpeggioPattern: arpeggio.pattern,
+        arpeggioRate: arpeggio.rate,
+      };
+      if ((bar.chordType || 'preset') === 'custom') {
+        return { ...base, ...buildCustomChordEvent(bar.tuningId, bar.root, bar.customChord || createDefaultCustomChord()) };
+      }
+      const chord = getChord(bar.tuningId, bar.chordId);
+      if (!chord) return null;
+      return {
+        ...base,
+        chordType: 'preset',
+        chord,
+        chordId: bar.chordId,
+        frequencies: chord.degrees.map((degree) => degreeToFrequency(bar.tuningId, degree + Number(bar.root || 0))),
+      };
+    })
+    .filter(Boolean);
   return {
     mode: state.mode,
     bpm: state.bpm,
@@ -1469,17 +1193,6 @@ function buildLoopPayload() {
     loopCount: 10,
     sequence,
   };
-}
-
-function previewBarChord(index) {
-  const bar = state.bars[index];
-  const event = buildBarEvent(bar);
-  if (!event) {
-    updateStatus('No chord to preview for this bar.');
-    return;
-  }
-  playChordPreview(event);
-  updateStatus(`Previewing Bar ${index + 1}.`);
 }
 
 async function playChord() {
@@ -1559,7 +1272,6 @@ function hookEvents() {
   tuningSelect.onchange = async (e) => {
     state.selectedTuningId = e.target.value;
     await ensureChords(state.selectedTuningId);
-    state.customChord = normalizeCustomChordForTuning(state.customChord, getTuning(state.selectedTuningId));
     renderRoots();
     renderChords();
     renderCustomChordEditor();
@@ -1626,21 +1338,6 @@ function hookEvents() {
     updateSynthLabels();
   };
 
-  if (patchNameInput) {
-    patchNameInput.oninput = (e) => {
-      state.patchName = e.target.value;
-    };
-  }
-  if (savePatchBtn) savePatchBtn.onclick = saveCurrentPatch;
-  if (loadPatchBtn) loadPatchBtn.onclick = () => loadSelectedPatch();
-  if (patchList) {
-    patchList.onchange = (e) => {
-      if (e.target.value) {
-        state.patchName = e.target.value;
-      }
-    };
-  }
-
   document.getElementById('playChordBtn').onclick = playChord;
   document.getElementById('renderChordBtn').onclick = renderChord;
   document.getElementById('playLoopBtn').onclick = playLoop;
@@ -1656,7 +1353,6 @@ function init() {
   rhythmLabel.textContent = `${state.rhythmSpeed.toFixed(2)}× pitch → beat`;
   chordSourceSelect.value = state.chordSource;
   updateSelectedBarLabel();
-  hydratePatches();
   fetchTunings();
   updateStatus('Loading tunings…');
 }
