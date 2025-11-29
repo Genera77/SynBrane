@@ -1,3 +1,15 @@
+// Base URL for the backend API.
+// In production (Vercel), this should point to the DigitalOcean backend.
+// For now, default to empty string (relative) but allow override from window.
+const API_BASE =
+  (typeof window !== 'undefined' && window.SYNBRANE_API_BASE) || '';
+
+function apiUrl(path) {
+  // ensure path starts with /
+  if (!path.startsWith('/')) path = `/${path}`;
+  return `${API_BASE}${path}`;
+}
+
 const chordSwitcher = document.getElementById('chordSwitcher');
 const chordLabel = document.getElementById('activeChordLabel');
 const chordTuning = document.getElementById('chordTuning');
@@ -299,7 +311,7 @@ async function playChord(index) {
       rhythmSpeed: state.rhythmSpeed,
       synthSettings: state.synth,
     };
-    const res = await fetch('/api/play', {
+    const res = await fetch(apiUrl('/api/play'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -329,7 +341,7 @@ function buildLoopPayload() {
 async function playLoop() {
   try {
     const payload = buildLoopPayload();
-    const res = await fetch('/api/play', {
+    const res = await fetch(apiUrl('/api/play'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -347,7 +359,7 @@ async function playLoop() {
 async function renderLoop() {
   try {
     const payload = buildLoopPayload();
-    const res = await fetch('/api/render', {
+    const res = await fetch(apiUrl('/api/render'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -480,7 +492,7 @@ function loadPatch(file) {
 async function init() {
   attachControlListeners();
   syncSynthLabels();
-  const res = await fetch('/api/tunings');
+  const res = await fetch(apiUrl('/api/tunings'));
   const data = await res.json();
   state.tunings = data.tunings || [];
   state.baseFrequency = data.baseFrequency || 440;

@@ -55,6 +55,16 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 ## Configuration
 - Local use requires no environment variables; all defaults are hard-coded for development and adjustable via the UI.
+- Frontend API base: all browser fetches go through a global `API_BASE` constant defined in `public/main.js`, which reads from `window.SYNBRANE_API_BASE` when present and otherwise defaults to an empty string for relative calls (suitable for local development).
+- In production (e.g., Vercel), set `window.SYNBRANE_API_BASE` in `index.html` or an injected script to point at the external backend (such as a DigitalOcean deployment):
+
+  ```html
+  <script>
+    window.SYNBRANE_API_BASE = "https://your-digitalocean-backend-url.com";
+  </script>
+  ```
+
+  With a backend at `https://my-synbrane-backend.example.com`, frontend calls like `fetch(apiUrl('/api/tunings'))` will request `https://my-synbrane-backend.example.com/api/tunings`.
 - Optional environment variables remain supported for overrides:
   - `PORT` (default `3000`)
   - `HOST` (default `0.0.0.0`)
