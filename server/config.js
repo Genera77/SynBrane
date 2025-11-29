@@ -35,7 +35,7 @@ const config = {
   scalesDir: process.env.SCALES_DIR || path.join(process.cwd(), 'scales'),
   superColliderEnabled: (process.env.SUPER_COLLIDER_ENABLED || '').toLowerCase() === 'true',
   superColliderSclangPath: process.env.SUPER_COLLIDER_SCLANG_PATH || 'sclang',
-  renderSampleRate: parseInt(process.env.RENDER_SAMPLE_RATE, 10) || 44100,
+  renderSampleRate: parseInt(process.env.RENDER_SAMPLE_RATE, 10) || 48000,
 };
 
 module.exports = config;
