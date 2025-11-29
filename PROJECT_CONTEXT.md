@@ -35,6 +35,7 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 - Frontend is hosted on Vercel at `https://syn-brane.vercel.app`.
 - Vercel exposes API proxy routes (`/api/tunings`, `/api/chords`, `/api/play`, `/api/render`) that forward requests to the droplet (`http://147.182.251.148:3000/api/...`) and return the responses to the browser.
 - The browser only calls these relative APIs via `apiUrl('/api/...')`, so all requests stay on the Vercel origin and avoid mixed-content issues while the server-to-server hop uses HTTP.
+- `/api/render` now rewrites any returned `file` path to point to `/api/render-file?path=...`, and `/api/render-file` streams the actual WAV from the droplet (e.g., `http://147.182.251.148:3000/renders/...`) back to the browser over HTTPS. No droplet changes or TLS termination are required.
 
 ## UI controls
 - Chords panel: four tabs labeled 1–4, active chord label, per-chord tuning select, circular note selector with toggleable degrees, Clear/Play buttons.

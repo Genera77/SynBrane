@@ -12,8 +12,24 @@ export default async function handler(req, res) {
       body: req.method === 'GET' ? undefined : JSON.stringify(req.body),
     });
 
+    const contentType = upstream.headers.get('content-type') || '';
     const text = await upstream.text();
-    const contentType = upstream.headers.get('content-type');
+
+    if (contentType.includes('application/json')) {
+      try {
+        const data = JSON.parse(text);
+
+        if (data && typeof data === 'object' && typeof data.file === 'string') {
+          data.file = `/api/render-file?path=${encodeURIComponent(data.file)}`;
+        }
+
+        res.setHeader('content-type', 'application/json');
+        return res.status(upstream.status).json(data);
+      } catch (err) {
+        // Fall back to passthrough below if JSON parsing fails
+      }
+    }
+
     if (contentType) {
       res.setHeader('content-type', contentType);
     }
