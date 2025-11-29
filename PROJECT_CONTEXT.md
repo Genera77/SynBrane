@@ -1,7 +1,7 @@
 # SynBrane project context
 
 ## Overview
-SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The backend can talk to SuperCollider for real audio playback/rendering or fall back to a built-in Node DSP engine when SuperCollider is unavailable. Users browse tunings, pick roots and chord patterns in the **Explore** palette, design custom chords with up to seven notes (including octave offsets), sequence a simple 4-bar loop, audition it, and export WAV renders from the browser.
+SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The backend can talk to SuperCollider for real audio playback/rendering or fall back to a built-in Node DSP engine when SuperCollider is unavailable. Users browse tunings, pick roots and chord patterns in the **Explore** palette, design custom chords with up to seven notes (including octave offsets), sequence a simple 4-bar loop, audition it, and export WAV renders from the browser. Each bar can optionally switch into an arpeggiated playback style with per-bar pattern/rate controls for harmony mode.
 
 Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square), an ADSR envelope (attack/decay/sustain/release), and an optional low-pass filter with resonance. Rhythm mode now layers a four-on-the-floor kick and snares on beats 2/4 with overtone-rich drum voices mapped per chord note. All synth controls are exposed in the UI and forwarded to the backend for previews and renders.
 
@@ -34,10 +34,12 @@ Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square),
   - Envelope: attack/decay/sustain/release in milliseconds. Release time extends rendered duration so tails are preserved.
   - Optional resonant low-pass filter with adjustable cutoff and resonance to tame or brighten harmonics.
   - Loudness normalized around -4 dBFS so preview loudness and rendered WAVs align.
+  - Per-bar arpeggio: when enabled on a bar, harmony notes render in sequence instead of as a stacked chord. Patterns: Up, Down, Up-Down. Rates: 1/4, 1/8, 1/16 notes synced to tempo. When arpeggio is off, chords play together as before.
 - **Rhythm mode (Node DSP)**
   - Drum-like hits with a low fundamental, multiple overtone partials, optional noise for attack, and soft saturation. Uses pitch→rate mapping via the rhythm-speed slider (effective multiplier 2.0–5.0).
   - Four-on-the-floor backbone: kick on every beat with snares on beats 2 and 4 across the loop duration.
   - Note-mapped percussion for up to seven chord notes: floor/mid/high toms, closed/open hats, ride, and a metallic click.
+  - Arpeggio toggles on bars currently leave rhythm timing unchanged; drum mapping still follows the chord notes.
 - **Browser preview** mirrors these designs: ADSR/filter for harmony, overtone-rich drum clicks for rhythm, so local audition matches renders.
 
 ## Tuning and chord presets
@@ -54,7 +56,7 @@ Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square),
   - Response: `{ chords: [{ id, label, degrees, name }], roots: [{ value, label }] }`
 - `POST /api/play` / `POST /api/render`
   - Single chord payload: `{ tuningId, chord, root, mode, bpm, rhythmSpeed, synthSettings, customChord?, frequencies?, loopCount? }` (customChord carries slots/degrees/frequencies for custom notes).
-  - 4-bar sequence payload: `{ mode, bpm, rhythmSpeed, synthSettings, loopCount?, sequence: [{ bar, durationBars, tuningId, chord, chordType, root, customChord?, frequencies? }] }`
+  - 4-bar sequence payload: `{ mode, bpm, rhythmSpeed, synthSettings, loopCount?, sequence: [{ bar, durationBars, tuningId, chord, chordType, root, customChord?, frequencies?, arpeggioEnabled?, arpeggioPattern?, arpeggioRate? }] }`
   - Both endpoints accept `tuningType`/`tuningValue` for backwards compatibility.
   - `synthSettings` shape: `{ waveform, envelope: { attackMs, decayMs, sustainLevel, releaseMs }, filter: { cutoffHz, resonance } }` (all optional; defaults applied server-side).
 
@@ -62,12 +64,14 @@ Harmony mode uses a synth-style voice: selectable waveforms (sine, saw, square),
 - Explore palette for tuning/root/chord selection plus a seven-slot Custom Chord editor with octave offsets; assign the selected preset or the custom layout to the highlighted bar via “Use for Bar X.”
 - Sequencer shows four bars; click any bar to select it for assignment. Mix tunings freely per bar, toggle each bar between preset chords and its own per-bar Custom Chord, and edit that bar’s seven slots directly with tuning-aware dropdowns and note-enable toggles.
 - Per-slot previews: every custom slot includes a 🔊 preview that plays a short Web Audio tone for that note using the bar’s tuning/root and current synth settings without interrupting the loop.
+- Per-bar playback style: each bar offers a “Chord vs Arpeggio” selector. When set to Arpeggio, pattern options (Up/Down/Up-Down) and rate options (1/4, 1/8, 1/16) appear. These settings currently affect harmony-mode playback and renders; rhythm-mode output stays mapped to the chord notes.
 - Global controls: tempo (30–300 BPM), harmony vs rhythm mode, rhythm-speed multiplier (2.0–5.0).
 - Synth controls (harmony): waveform, attack, decay, sustain level, release, low-pass cutoff, resonance.
 - Preview/render actions for a single chord or the full 4-bar loop. Loop playback repeats until you press Stop or until 10 passes have played.
 
 ## Configuration
 - Local use requires no environment variables; all defaults are hard-coded for development and adjustable via the UI.
+- Arpeggio controls are fully UI-driven with hard-coded defaults; no additional environment flags are needed.
 - Optional environment variables remain supported for overrides:
   - `PORT` (default `3000`)
   - `HOST` (default `0.0.0.0`)

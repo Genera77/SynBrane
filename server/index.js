@@ -72,6 +72,14 @@ function parseBody(req) {
   });
 }
 
+function parseArpeggioFields(source = {}) {
+  return {
+    enabled: Boolean(source.arpeggioEnabled),
+    pattern: source.arpeggioPattern || 'up',
+    rate: source.arpeggioRate || '1/8',
+  };
+}
+
 function handleTunings(req, res) {
   const payload = listTunings();
   sendJson(res, 200, {
@@ -93,12 +101,14 @@ async function handlePlay(req, res) {
   try {
     const body = await parseBody(req);
     const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings, loopCount } = body;
+    const baseArpeggio = parseArpeggioFields(body);
 
     if (Array.isArray(body.sequence) && body.sequence.length) {
       const events = body.sequence.map((event, index) => {
         const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
         let frequencies = Array.isArray(event.frequencies) && event.frequencies.length ? event.frequencies : [];
         let customChord = event.customChord;
+        const arpeggio = parseArpeggioFields(event);
         if (!frequencies.length && event.customChord) {
           const resolved = resolveCustomChordDegrees({
             customChord: event.customChord,
@@ -127,6 +137,7 @@ async function handlePlay(req, res) {
           durationBars: event.durationBars || 1,
           frequencies,
           customChord,
+          arpeggio,
         };
       });
       const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events, synthSettings, loopCount });
@@ -169,6 +180,7 @@ async function handlePlay(req, res) {
       synthSettings,
       loopCount,
       customChord,
+      arpeggio: baseArpeggio,
     });
     sendJson(res, 200, { status: 'ok', playResult });
   } catch (error) {
@@ -180,12 +192,14 @@ async function handleRender(req, res) {
   try {
     const body = await parseBody(req);
     const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings } = body;
+    const baseArpeggio = parseArpeggioFields(body);
 
     if (Array.isArray(body.sequence) && body.sequence.length) {
       const events = body.sequence.map((event, index) => {
         const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
         let frequencies = Array.isArray(event.frequencies) && event.frequencies.length ? event.frequencies : [];
         let customChord = event.customChord;
+        const arpeggio = parseArpeggioFields(event);
         if (!frequencies.length && event.customChord) {
           const resolved = resolveCustomChordDegrees({
             customChord: event.customChord,
@@ -214,6 +228,7 @@ async function handleRender(req, res) {
           durationBars: event.durationBars || 1,
           frequencies,
           customChord,
+          arpeggio,
         };
       });
       const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events, synthSettings });
@@ -240,7 +255,16 @@ async function handleRender(req, res) {
       frequencies = chordFrequencies({ ...parsed, chord: body.chord, root: body.root || 0, baseFrequency: config.baseFrequency });
     }
     const duration = body.duration || 4;
-    const renderResult = await renderToFile({ mode, frequencies, duration, rhythmSpeed, bpm, synthSettings, customChord });
+    const renderResult = await renderToFile({
+      mode,
+      frequencies,
+      duration,
+      rhythmSpeed,
+      bpm,
+      synthSettings,
+      customChord,
+      arpeggio: baseArpeggio,
+    });
     const relativeUrl = `/renders/${renderResult.filename}`;
     sendJson(res, 200, { status: 'ok', file: relativeUrl });
   } catch (error) {

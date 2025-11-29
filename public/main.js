@@ -40,6 +40,14 @@ function createDefaultCustomChord() {
   };
 }
 
+function createDefaultArpeggio() {
+  return {
+    enabled: false,
+    pattern: 'up',
+    rate: '1/8',
+  };
+}
+
 const state = {
   tunings: [],
   baseFrequency: 440,
@@ -68,6 +76,18 @@ const state = {
     },
   },
 };
+
+const ARPEGGIO_PATTERNS = [
+  { value: 'up', label: 'Up (low → high)' },
+  { value: 'down', label: 'Down (high → low)' },
+  { value: 'upDown', label: 'Up-Down (bounce)' },
+];
+
+const ARPEGGIO_RATES = [
+  { value: '1/4', label: 'Quarter notes (1/4)' },
+  { value: '1/8', label: 'Eighth notes (1/8)' },
+  { value: '1/16', label: 'Sixteenth notes (1/16)' },
+];
 
 const loopPreview = {
   ctx: null,
@@ -159,6 +179,14 @@ function ensureBarCustomChord(bar) {
     bar.customChord = createDefaultCustomChord();
   }
   return bar.customChord;
+}
+
+function ensureBarArpeggio(bar) {
+  return {
+    enabled: Boolean(bar.arpeggioEnabled),
+    pattern: bar.arpeggioPattern || 'up',
+    rate: bar.arpeggioRate || '1/8',
+  };
 }
 
 function resolveCustomChord(tuningId, root, customChord = state.customChord) {
@@ -353,6 +381,9 @@ function seedSelections() {
     chordId: state.selectedChordId,
     chordType: 'preset',
     customChord: createDefaultCustomChord(),
+    arpeggioEnabled: false,
+    arpeggioPattern: 'up',
+    arpeggioRate: '1/8',
   }));
   state.selectedBar = 0;
 }
@@ -453,6 +484,7 @@ function assignChordToSelectedBar() {
 function renderBars() {
   barsContainer.innerHTML = '';
   state.bars.forEach((bar) => {
+    const arpeggio = ensureBarArpeggio(bar);
     const card = document.createElement('div');
     card.className = `bar-card ${bar.bar === state.selectedBar ? 'active-bar' : ''}`;
     card.onclick = (event) => {
@@ -555,6 +587,66 @@ function renderBars() {
       };
       chordLabel.appendChild(chordSelectEl);
       card.appendChild(chordLabel);
+    }
+
+    const playbackLabel = document.createElement('label');
+    playbackLabel.textContent = 'Playback';
+    const playbackSelect = document.createElement('select');
+    [
+      { value: 'chord', label: 'Chord (together)' },
+      { value: 'arpeggio', label: 'Arpeggio (sequenced)' },
+    ].forEach((optionDef) => {
+      const option = document.createElement('option');
+      option.value = optionDef.value;
+      option.textContent = optionDef.label;
+      playbackSelect.appendChild(option);
+    });
+    playbackSelect.value = arpeggio.enabled ? 'arpeggio' : 'chord';
+    playbackSelect.onchange = (e) => {
+      const nextEnabled = e.target.value === 'arpeggio';
+      state.bars[bar.bar] = { ...state.bars[bar.bar], arpeggioEnabled: nextEnabled };
+      renderBars();
+    };
+    playbackLabel.appendChild(playbackSelect);
+    card.appendChild(playbackLabel);
+
+    if (arpeggio.enabled) {
+      const arpWrapper = document.createElement('div');
+      arpWrapper.className = 'arpeggio-controls';
+
+      const patternLabel = document.createElement('label');
+      patternLabel.textContent = 'Arpeggio pattern';
+      const patternSelect = document.createElement('select');
+      ARPEGGIO_PATTERNS.forEach((pattern) => {
+        const option = document.createElement('option');
+        option.value = pattern.value;
+        option.textContent = pattern.label;
+        patternSelect.appendChild(option);
+      });
+      patternSelect.value = arpeggio.pattern;
+      patternSelect.onchange = (e) => {
+        state.bars[bar.bar] = { ...state.bars[bar.bar], arpeggioPattern: e.target.value };
+      };
+      patternLabel.appendChild(patternSelect);
+      arpWrapper.appendChild(patternLabel);
+
+      const rateLabel = document.createElement('label');
+      rateLabel.textContent = 'Arpeggio rate';
+      const rateSelect = document.createElement('select');
+      ARPEGGIO_RATES.forEach((rate) => {
+        const option = document.createElement('option');
+        option.value = rate.value;
+        option.textContent = rate.label;
+        rateSelect.appendChild(option);
+      });
+      rateSelect.value = arpeggio.rate;
+      rateSelect.onchange = (e) => {
+        state.bars[bar.bar] = { ...state.bars[bar.bar], arpeggioRate: e.target.value };
+      };
+      rateLabel.appendChild(rateSelect);
+      arpWrapper.appendChild(rateLabel);
+
+      card.appendChild(arpWrapper);
     }
 
     const customEditor = createBarCustomEditor(bar, chordTypeSelect);
@@ -895,6 +987,42 @@ function scheduleHarmony(ctx, startTime, duration, freqs, synthSettings) {
   });
 }
 
+function arpeggioStepSeconds(rate) {
+  const secondsPerBeat = 60 / state.bpm;
+  if (rate === '1/4') return secondsPerBeat;
+  if (rate === '1/16') return secondsPerBeat / 4;
+  return secondsPerBeat / 2;
+}
+
+function arpeggioCycle(freqs, pattern) {
+  if (!freqs?.length) return [];
+  if (pattern === 'down') return [...freqs].slice().reverse();
+  if (pattern === 'upDown') {
+    const ascent = [...freqs];
+    const descent = freqs.length > 1 ? [...freqs].slice(1, -1).reverse() : [];
+    return [...ascent, ...descent];
+  }
+  return [...freqs];
+}
+
+function scheduleHarmonyArpeggio(ctx, startTime, duration, freqs, synthSettings, arpeggio) {
+  const stepDuration = arpeggioStepSeconds(arpeggio?.rate || '1/8');
+  const cycle = arpeggioCycle(freqs, arpeggio?.pattern || 'up');
+  if (!cycle.length || !Number.isFinite(stepDuration) || stepDuration <= 0) {
+    scheduleHarmony(ctx, startTime, duration, freqs, synthSettings);
+    return;
+  }
+  const steps = Math.max(1, Math.floor(duration / stepDuration));
+  for (let step = 0; step < steps; step += 1) {
+    const noteStart = startTime + step * stepDuration;
+    const remaining = duration - step * stepDuration;
+    if (remaining <= 0) break;
+    const noteDuration = Math.min(stepDuration, remaining);
+    const freq = cycle[step % cycle.length];
+    scheduleHarmony(ctx, noteStart, noteDuration, [freq], synthSettings);
+  }
+}
+
 function playNotePreview(tuningId, root, degreeValue) {
   const freq = degreeToFrequency(tuningId, Number(root || 0) + Number(degreeValue || 0));
   if (!Number.isFinite(freq)) return;
@@ -916,7 +1044,14 @@ function playChordPreview(event) {
   if (state.mode === 'rhythm') {
     scheduleRhythm(ctx, start, duration, freqs);
   } else {
-    scheduleHarmony(ctx, start, duration, freqs, state.synth);
+    const arpeggio = event?.arpeggioEnabled
+      ? { enabled: true, pattern: event.arpeggioPattern, rate: event.arpeggioRate }
+      : null;
+    if (arpeggio?.enabled) {
+      scheduleHarmonyArpeggio(ctx, start, duration, freqs, state.synth, arpeggio);
+    } else {
+      scheduleHarmony(ctx, start, duration, freqs, state.synth);
+    }
   }
 }
 
@@ -927,7 +1062,15 @@ function playSequenceOnce(ctx, startTime, barDuration, events) {
     if (state.mode === 'rhythm') {
       scheduleRhythm(ctx, eventStart, barDuration * (event.durationBars || 1), freqs);
     } else {
-      scheduleHarmony(ctx, eventStart, barDuration * (event.durationBars || 1), freqs, state.synth);
+      const arpeggio = event?.arpeggioEnabled
+        ? { enabled: true, pattern: event.arpeggioPattern, rate: event.arpeggioRate }
+        : null;
+      const duration = barDuration * (event.durationBars || 1);
+      if (arpeggio?.enabled) {
+        scheduleHarmonyArpeggio(ctx, eventStart, duration, freqs, state.synth, arpeggio);
+      } else {
+        scheduleHarmony(ctx, eventStart, duration, freqs, state.synth);
+      }
     }
   });
 }
@@ -1018,11 +1161,15 @@ function buildChordPayload() {
 function buildLoopPayload() {
   const sequence = state.bars
     .map((bar) => {
+      const arpeggio = ensureBarArpeggio(bar);
       const base = {
         bar: bar.bar,
         durationBars: 1,
         tuningId: bar.tuningId,
         root: Number(bar.root || 0),
+        arpeggioEnabled: arpeggio.enabled,
+        arpeggioPattern: arpeggio.pattern,
+        arpeggioRate: arpeggio.rate,
       };
       if ((bar.chordType || 'preset') === 'custom') {
         return { ...base, ...buildCustomChordEvent(bar.tuningId, bar.root, bar.customChord || createDefaultCustomChord()) };
