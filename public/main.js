@@ -87,7 +87,6 @@ const defaultSynth = {
 
 const MIN_OCTAVE_RING = -1;
 const MAX_OCTAVE_RING = 1;
-const OCTAVE_RINGS = [MIN_OCTAVE_RING, 0, MAX_OCTAVE_RING];
 
 function defaultArp() {
   return { enabled: false, pattern: 'up', rate: '1/8' };
@@ -111,7 +110,6 @@ const state = {
   synth: JSON.parse(JSON.stringify(defaultSynth)),
   preview: { arpeggiate: false, arpRateMs: 180, loop: false },
   loopPreview: { ctx: null, timer: null, stop: false, nodes: [], noiseBuffer: null },
-  noteNodeCache: {},
 };
 
 function clampRhythmSpeed(value) {
@@ -147,17 +145,17 @@ function getDegreeSpan(tuning) {
   return tuning.intervals?.length || tuning.count || 12;
 }
 
-function degreeLabel(tuning, degree, root = 0) {
-  const span = getDegreeSpan(tuning);
-  const wrappedDegree = ((degree % span) + span) % span;
-  const wrappedRoot = ((root % span) + span) % span;
-  const isRoot = wrappedDegree === wrappedRoot;
-  if (tuning?.type === 'edo' && tuning.value === 12) {
-    const label = NOTE_NAMES_12[wrappedDegree % 12];
-    return isRoot ? `${label} •` : label;
+  function degreeLabel(tuning, degree, root = 0) {
+    const span = getDegreeSpan(tuning);
+    const wrappedDegree = ((degree % span) + span) % span;
+    const wrappedRoot = ((root % span) + span) % span;
+    const isRoot = wrappedDegree === wrappedRoot;
+    if (tuning?.type === 'edo' && tuning.value === 12) {
+      const label = NOTE_NAMES_12[wrappedDegree % 12];
+      return isRoot ? `${label} •` : label;
+    }
+    return `${isRoot ? 'R ' : ''}${wrappedDegree}°`;
   }
-  return `${isRoot ? 'R ' : ''}${wrappedDegree}°`;
-}
 
 function degreeToFrequency(tuningId, degree) {
   const tuning = getTuning(tuningId);
@@ -215,23 +213,23 @@ function mapIntervalsToDegrees(intervals, tuning, root = 0) {
   return Array.from(new Set(degrees)).sort((a, b) => a - b);
 }
 
-function normalizeChordNotes(chord) {
-  const tuning = getTuning(chord.tuningId);
-  const span = getDegreeSpan(tuning);
-  const minDeg = MIN_OCTAVE_RING * span;
-  const maxDeg = (MAX_OCTAVE_RING + 1) * span - 1;
-  chord.arp = {
-    ...defaultArp(),
-    ...(chord.arp || {}),
-  };
-  chord.notes = (chord.notes || [])
-    .map((deg) => {
-      const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
-      return Math.max(minDeg, Math.min(safe, maxDeg));
-    });
-  if (!chord.notes.length) chord.notes = [];
-  return chord;
-}
+  function normalizeChordNotes(chord) {
+    const tuning = getTuning(chord.tuningId);
+    const span = getDegreeSpan(tuning);
+    const minDeg = MIN_OCTAVE_RING * span;
+    const maxDeg = (MAX_OCTAVE_RING + 1) * span - 1;
+    chord.arp = {
+      ...defaultArp(),
+      ...(chord.arp || {}),
+    };
+    chord.notes = (chord.notes || [])
+      .map((deg) => {
+        const safe = Number.isFinite(deg) ? Math.round(deg) : 0;
+        return Math.max(minDeg, Math.min(safe, maxDeg));
+      });
+    if (!chord.notes.length) chord.notes = [];
+    return chord;
+  }
 
 function renderChordSwitcher() {
   chordSwitcher.innerHTML = '';
@@ -329,133 +327,88 @@ function octaveColor(tuning, octave) {
   };
 }
 
-function tuningThemeClass(tuning) {
-  if (!tuning) return 'tuning-default';
-  if (tuning.type === 'edo') return `tuning-edo-${tuning.value || 'x'}`;
-  return 'tuning-scala';
-}
-
-function computeCircleLayout(span) {
-  const ringCount = OCTAVE_RINGS.length;
-  const pointSize = span > 30 ? 15 : span > 24 ? 18 : span > 20 ? 20 : span > 16 ? 22 : 27;
-  const densityBoost = span >= 30 ? 1.2 : span >= 24 ? 1.12 : span >= 19 ? 1.06 : 1.02;
-  const preferredBase = span >= 30 ? 420 : span >= 24 ? 390 : span >= 19 ? 360 : 340;
-  const preferredSize = Math.max(preferredBase * densityBoost, ringCount * (pointSize + 60));
-  const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
-  const circleSize = Math.min(preferredSize, Math.max(320, wrapSize - 12));
-  const center = circleSize / 2;
-  const maxRadius = center - pointSize * 0.7 - 8;
-  const baseRadius = Math.max(pointSize * 1.9, center * 0.32);
-  const rawSpacing = ringCount > 1 ? (maxRadius - baseRadius) / (ringCount - 1) : 0;
-  const ringSpacing = Math.min(48, Math.max(34, rawSpacing));
-  const spiralOffset = 0.12 + Math.min(0.22, (Math.PI / span) * 1.25);
-  const wobbleAmount = span >= 30 ? 6 : span >= 24 ? 7 : 8;
-  const petalsCount = span >= 30 ? Math.round(span / 4) : span >= 22 ? Math.round(span / 3.2) : Math.max(5, Math.round(span / 2.6));
-  const startAngle = -Math.PI / 2;
-  return {
-    pointSize,
-    circleSize,
-    center,
-    ringSpacing,
-    baseRadius,
-    spiralOffset,
-    wobbleAmount,
-    petalsCount,
-    angleStep: (Math.PI * 2) / span,
-    startAngle,
-  };
-}
-
-function ensureNoteNodes(tuning, span) {
-  const cached = state.noteNodeCache[tuning?.id || 'unknown'];
-  if (cached && cached.span === span) return cached;
-
-  const container = document.createElement('div');
-  container.className = 'note-points-layer';
-  const nodes = [];
-
-  OCTAVE_RINGS.forEach((octave, octaveIndex) => {
-    for (let degree = 0; degree < span; degree += 1) {
-      const absoluteDegree = degree + octave * span;
-      const point = document.createElement('div');
-      point.className = 'note-point muted';
-      point.dataset.degree = degree;
-      point.dataset.octave = octave;
-      point.dataset.octaveIndex = octaveIndex;
-      point.onclick = () => {
-        const chord = state.chords[state.activeChord];
-        if (chord.notes.includes(absoluteDegree)) {
-          chord.notes = chord.notes.filter((n) => n !== absoluteDegree);
-        } else {
-          chord.notes = [...chord.notes, absoluteDegree].sort((a, b) => a - b);
-        }
-        normalizeChordNotes(chord);
-        renderCircle();
-      };
-      container.appendChild(point);
-      nodes.push({ element: point, degree, octave, octaveIndex, absoluteDegree });
+  function renderCircle() {
+    const chord = state.chords[state.activeChord];
+    normalizeChordNotes(chord);
+    const tuning = getTuning(chord.tuningId);
+    const span = getDegreeSpan(tuning);
+    noteCircle.innerHTML = '';
+    const minOctave = MIN_OCTAVE_RING;
+    const maxOctave = MAX_OCTAVE_RING;
+    const octaves = [];
+    for (let octave = minOctave; octave <= maxOctave; octave += 1) {
+      octaves.push(octave);
     }
-  });
 
-  const cacheEntry = { span, container, nodes };
-  state.noteNodeCache[tuning?.id || 'unknown'] = cacheEntry;
-  return cacheEntry;
-}
+    const ringCount = octaves.length;
+    const pointSize = span > 30 ? 15 : span > 22 ? 19 : span > 16 ? 22 : 28;
+    const densityBoost = span >= 30 ? 1.16 : span >= 24 ? 1.08 : 1.02;
+    const preferredBase = span >= 28 ? 380 : span >= 22 ? 360 : 340;
+    const preferredSize = Math.max(
+      preferredBase * densityBoost,
+      ringCount * (pointSize + 40)
+    );
+    const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
+    const circleSize = Math.min(preferredSize, Math.max(300, wrapSize - 12));
+    noteCircle.style.width = `${circleSize}px`;
+    noteCircle.style.height = `${circleSize}px`;
+    const center = circleSize / 2;
+    const maxRadius = center - pointSize / 2 - 8;
+    const innerRadius = Math.max(pointSize * 1.35, 34);
+    const ringSpacing = ringCount > 1 ? (maxRadius - innerRadius) / (ringCount - 1) : 0;
+    const spacingBoost = span >= 28 ? 5 : span >= 22 ? 3 : 0;
+    const twistPerRing = Math.PI / (span * 1.2);
 
-function renderCircle() {
-  const chord = state.chords[state.activeChord];
-  normalizeChordNotes(chord);
-  const tuning = getTuning(chord.tuningId);
-  const span = getDegreeSpan(tuning);
-  const layout = computeCircleLayout(span);
-  noteCircle.className = `note-circle ${tuningThemeClass(tuning)}`;
-  noteCircle.style.width = `${layout.circleSize}px`;
-  noteCircle.style.height = `${layout.circleSize}px`;
-
-  const cache = ensureNoteNodes(tuning, span);
-  noteCircle.innerHTML = '';
-  noteCircle.appendChild(cache.container);
-
-  const paletteCache = {};
-  cache.nodes.forEach((node) => {
-    const palette = paletteCache[node.octave] || octaveColor(tuning, node.octave);
-    paletteCache[node.octave] = palette;
-    const isActive = chord.notes.includes(node.absoluteDegree);
-    node.element.classList.toggle('active', isActive);
-    node.element.classList.toggle('muted', !isActive);
-    const baseAngle = node.degree * layout.angleStep + layout.startAngle;
-    const angle = baseAngle + node.octaveIndex * layout.spiralOffset;
-    const radiusBase = layout.baseRadius + node.octaveIndex * layout.ringSpacing;
-    const radius = radiusBase + layout.wobbleAmount * Math.sin(angle * layout.petalsCount);
-    const x = layout.center + radius * Math.cos(angle);
-    const y = layout.center + radius * Math.sin(angle);
-
-    node.element.style.width = `${layout.pointSize}px`;
-    node.element.style.height = `${layout.pointSize}px`;
-    const fontSize = span >= 30 ? 9 : span >= 24 ? 10 : span >= 20 ? 11 : Math.max(10, layout.pointSize - 10);
-    node.element.style.fontSize = `${fontSize}px`;
-    node.element.style.lineHeight = `${layout.pointSize}px`;
-    node.element.style.transform = `translate(${x - layout.pointSize / 2}px, ${y - layout.pointSize / 2}px)`;
-    node.element.style.setProperty('--bubble-main', palette.main);
-    node.element.style.setProperty('--bubble-muted', palette.muted);
-    node.element.style.setProperty('--bubble-highlight', palette.highlight);
-    node.element.style.setProperty('--bubble-glow', palette.glow);
-    node.element.style.setProperty('--bubble-text', palette.text);
-    node.element.style.setProperty('--bubble-text-strong', palette.strongText);
-    node.element.style.setProperty('--bubble-shadow', palette.shadow);
-    node.element.style.setProperty('--bubble-outline', palette.outline);
-    node.element.style.background = isActive ? palette.highlight : palette.muted;
-    node.element.style.borderColor = isActive ? palette.outline : palette.mutedStroke;
-    node.element.style.color = isActive ? palette.strongText : palette.text;
-    node.element.style.opacity = isActive ? '1' : '0.65';
-    node.element.style.boxShadow = isActive
-      ? `0 0 0 2px ${palette.outline}, 0 0 14px ${palette.glow}, 0 12px 26px rgba(0, 0, 0, 0.55)`
-      : '0 2px 8px rgba(0, 0, 0, 0.32)';
-    node.element.textContent = degreeLabel(tuning, node.degree, chord.root || 0);
-    node.element.title = `Degree ${node.degree} (oct ${node.octave >= 0 ? `+${node.octave}` : node.octave})`;
-  });
-  renderIntervalPanels();
-}
+    octaves.forEach((octave, ringIndex) => {
+      const radius = Math.min(maxRadius, innerRadius + ringIndex * (ringSpacing + spacingBoost));
+      for (let degree = 0; degree < span; degree += 1) {
+        const baseAngle = (Math.PI * 2 * degree) / span - Math.PI / 2;
+        const angle = baseAngle + ringIndex * twistPerRing;
+        const x = center + radius * Math.cos(angle) - pointSize / 2;
+        const y = center + radius * Math.sin(angle) - pointSize / 2;
+        const absoluteDegree = degree + octave * span;
+        const palette = octaveColor(tuning, octave);
+        const isActive = chord.notes.includes(absoluteDegree);
+        const point = document.createElement('div');
+        point.className = 'note-point';
+        point.classList.add(isActive ? 'active' : 'muted');
+        point.style.width = `${pointSize}px`;
+        point.style.height = `${pointSize}px`;
+        point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, pointSize - 8)}px`;
+        point.style.lineHeight = `${pointSize}px`;
+        point.style.left = `${x}px`;
+        point.style.top = `${y}px`;
+        point.style.setProperty('--bubble-main', palette.main);
+        point.style.setProperty('--bubble-muted', palette.muted);
+        point.style.setProperty('--bubble-highlight', palette.highlight);
+        point.style.setProperty('--bubble-glow', palette.glow);
+        point.style.setProperty('--bubble-text', palette.text);
+        point.style.setProperty('--bubble-text-strong', palette.strongText);
+        point.style.setProperty('--bubble-shadow', palette.shadow);
+        point.style.setProperty('--bubble-outline', palette.outline);
+        point.style.background = isActive ? palette.highlight : palette.muted;
+        point.style.borderColor = isActive ? palette.outline : palette.mutedStroke;
+        point.style.color = isActive ? palette.strongText : palette.text;
+        point.style.opacity = isActive ? '1' : '0.6';
+        point.style.boxShadow = isActive
+          ? `0 0 0 2px ${palette.outline}, 0 0 14px ${palette.glow}, 0 12px 26px rgba(0, 0, 0, 0.55)`
+          : '0 2px 8px rgba(0, 0, 0, 0.32)';
+        point.textContent = degreeLabel(tuning, degree, chord.root || 0);
+        point.title = `Degree ${degree} (oct ${octave >= 0 ? `+${octave}` : octave})`;
+        point.onclick = () => {
+          if (chord.notes.includes(absoluteDegree)) {
+            chord.notes = chord.notes.filter((n) => n !== absoluteDegree);
+          } else {
+            chord.notes = [...chord.notes, absoluteDegree].sort((a, b) => a - b);
+          }
+          normalizeChordNotes(chord);
+          renderCircle();
+        };
+        noteCircle.appendChild(point);
+      }
+    });
+    renderIntervalPanels();
+  }
 
 function intervalLabelByIndex(idx) {
   const labels = ['Root', '2nd', '3rd', '4th', '5th', '6th', '7th', '9th', '11th', '13th'];
@@ -1030,21 +983,21 @@ function scheduleChordPreview(chord, startTime, durationSec) {
     }
   }
 
-function buildLoopPayload() {
-  state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
-  const visibleChords = state.chords.slice(0, Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount), state.chords.length)));
-  const sequence = visibleChords.map((chord, idx) => chordToEvent(chord, idx));
-  const loopCount = 10;
-  return {
-    mode: state.mode,
-    bpm: state.bpm,
-    rhythmSpeed: state.rhythmSpeed,
-    synthSettings: { ...state.synth },
-    loopCount,
-    sequence,
-    loopChordCount: sequence.length,
-  };
-}
+  function buildLoopPayload() {
+    state.rhythmSpeed = clampRhythmSpeed(state.rhythmSpeed);
+    const visibleChords = state.chords.slice(0, Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount), state.chords.length)));
+    const sequence = visibleChords.map((chord, idx) => chordToEvent(chord, idx));
+    const loopCount = 10;
+    return {
+      mode: state.mode,
+      bpm: state.bpm,
+      rhythmSpeed: state.rhythmSpeed,
+      synthSettings: { ...state.synth },
+      loopCount,
+      sequence,
+      loopChordCount: sequence.length,
+    };
+  }
 
 async function playLoop() {
   try {
