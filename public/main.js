@@ -153,7 +153,7 @@ function getDegreeSpan(tuning) {
       const label = NOTE_NAMES_12[wrappedDegree % 12];
       return isRoot ? `${label} •` : label;
     }
-    return `${isRoot ? 'R ' : ''}${wrappedDegree}°`;
+    return `${isRoot ? 'R ' : ''}${wrappedDegree + 1}°`;
   }
 
 function degreeToFrequency(tuningId, degree) {
@@ -480,7 +480,7 @@ function renderCircle() {
 
 function intervalLabelByIndex(idx) {
   const labels = ['Root', '2nd', '3rd', '4th', '5th', '6th', '7th', '9th', '11th', '13th'];
-  return labels[idx] || `${idx}°`;
+  return labels[idx] || `${idx + 1}°`;
 }
 
 function renderIntervalPanels() {
