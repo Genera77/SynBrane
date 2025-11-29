@@ -262,6 +262,41 @@ function renderRootOptions() {
   chordRoot.value = chord.root || 0;
 }
 
+function baseHueForTuning(tuning) {
+  if (!tuning) return 200;
+  if (tuning.type === 'edo') {
+    const hueMap = {
+      8: 150,
+      12: 190,
+      19: 300,
+      22: 35,
+      24: 130,
+      31: 18,
+      32: 260,
+    };
+    return hueMap[tuning.value] ?? ((tuning.value * 9 + 40) % 360);
+  }
+  return 210;
+}
+
+function octaveColor(tuning, octave) {
+  const baseHue = baseHueForTuning(tuning);
+  const hue = (baseHue + octave * 10 + 360) % 360;
+  const saturation = Math.max(48, Math.min(78, 72 - Math.abs(octave) * 6));
+  const lightness = Math.max(34, Math.min(78, 54 + octave * 7));
+  const mutedLight = Math.max(40, Math.min(88, lightness + (octave >= 0 ? 8 : 12)));
+  const textColor = lightness > 62 ? '#0c1118' : '#f7fbff';
+  const strongText = lightness > 58 ? '#0b0f14' : '#f9fbff';
+  return {
+    main: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+    muted: `hsl(${hue}, ${saturation - 8}%, ${mutedLight}%)`,
+    shadow: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.45)`,
+    outline: `hsla(${hue}, ${saturation}%, ${lightness}%, 0.85)`,
+    text: textColor,
+    strongText,
+  };
+}
+
   function renderCircle() {
     const chord = state.chords[state.activeChord];
     normalizeChordNotes(chord);
@@ -276,33 +311,54 @@ function renderRootOptions() {
     }
 
     const ringCount = octaves.length;
-    const pointSize = span > 30 ? 14 : span > 22 ? 18 : span > 16 ? 22 : 28;
-    const preferredSize = Math.max(span > 24 ? 360 : 340, ringCount * (pointSize + 36));
+    const pointSize = span > 30 ? 15 : span > 22 ? 19 : span > 16 ? 22 : 28;
+    const densityBoost = span >= 30 ? 1.16 : span >= 24 ? 1.08 : 1.02;
+    const preferredBase = span >= 28 ? 380 : span >= 22 ? 360 : 340;
+    const preferredSize = Math.max(
+      preferredBase * densityBoost,
+      ringCount * (pointSize + 40)
+    );
     const wrapSize = noteCircle.parentElement?.clientWidth || preferredSize;
-    const circleSize = Math.min(preferredSize, Math.max(280, wrapSize - 24));
+    const circleSize = Math.min(preferredSize, Math.max(300, wrapSize - 12));
     noteCircle.style.width = `${circleSize}px`;
     noteCircle.style.height = `${circleSize}px`;
     const center = circleSize / 2;
-    const maxRadius = center - pointSize / 2 - 10;
-    const innerRadius = Math.max(pointSize * 1.25, 30);
+    const maxRadius = center - pointSize / 2 - 8;
+    const innerRadius = Math.max(pointSize * 1.35, 34);
     const ringSpacing = ringCount > 1 ? (maxRadius - innerRadius) / (ringCount - 1) : 0;
-    const twistPerRing = Math.PI / (span * 1.25);
+    const spacingBoost = span >= 28 ? 5 : span >= 22 ? 3 : 0;
+    const twistPerRing = Math.PI / (span * 1.2);
 
     octaves.forEach((octave, ringIndex) => {
-      const radius = innerRadius + ringIndex * ringSpacing;
+      const radius = Math.min(maxRadius, innerRadius + ringIndex * (ringSpacing + spacingBoost));
       for (let degree = 0; degree < span; degree += 1) {
         const baseAngle = (Math.PI * 2 * degree) / span - Math.PI / 2;
         const angle = baseAngle + ringIndex * twistPerRing;
         const x = center + radius * Math.cos(angle) - pointSize / 2;
         const y = center + radius * Math.sin(angle) - pointSize / 2;
         const absoluteDegree = degree + octave * span;
+        const palette = octaveColor(tuning, octave);
+        const isActive = chord.notes.includes(absoluteDegree);
         const point = document.createElement('div');
-        point.className = `note-point ${chord.notes.includes(absoluteDegree) ? 'active' : ''}`;
+        point.className = `note-point ${isActive ? 'active' : ''}`;
         point.style.width = `${pointSize}px`;
         point.style.height = `${pointSize}px`;
-        point.style.fontSize = `${Math.max(9, pointSize - 6)}px`;
+        point.style.fontSize = `${span >= 28 ? 9 : span >= 22 ? 10 : Math.max(10, pointSize - 8)}px`;
+        point.style.lineHeight = `${pointSize}px`;
         point.style.left = `${x}px`;
         point.style.top = `${y}px`;
+        point.style.setProperty('--bubble-main', palette.main);
+        point.style.setProperty('--bubble-muted', palette.muted);
+        point.style.setProperty('--bubble-text', palette.text);
+        point.style.setProperty('--bubble-text-strong', palette.strongText);
+        point.style.setProperty('--bubble-shadow', palette.shadow);
+        point.style.setProperty('--bubble-outline', palette.outline);
+        point.style.background = isActive ? palette.main : palette.muted;
+        point.style.borderColor = isActive ? palette.main : palette.muted;
+        point.style.color = isActive ? palette.strongText : palette.text;
+        point.style.boxShadow = isActive
+          ? `0 0 0 1px ${palette.outline}, 0 8px 18px ${palette.shadow}`
+          : '0 3px 8px rgba(0, 0, 0, 0.4)';
         point.textContent = degreeLabel(tuning, degree, chord.root || 0);
         point.title = `Degree ${degree} (oct ${octave >= 0 ? `+${octave}` : octave})`;
         point.onclick = () => {
