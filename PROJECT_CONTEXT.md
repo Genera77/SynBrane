@@ -4,6 +4,8 @@
 SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The browser now focuses on a streamlined two-panel layout: a **Chords** box for editing up to five loop chords (one at a time) using a circular note selector, and a **Synth Parameters** box for global playback controls and patch management. Chord edits are sent to the backend/audio engine for live playback or WAV renders. The top of the page carries a cyberpunk-style ASCII "SynBrane" banner above the subtitle.
 The header includes a simple link to a dedicated About page (`/about.html`) with centered copy that walks through how SynBrane works across harmony and rhythm modes, looping, patching, and supported tunings.
 
+The About link now sits beneath the subtitle, aligned to the right so it no longer overlaps the ASCII banner.
+
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
