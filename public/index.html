@@ -15,20 +15,107 @@
   </head>
   <body>
     <header>
-      <div class="ascii-banner" aria-hidden="true">
-        <pre>
- (        )     )        (                 )       
- )\ )  ( /(  ( /(    (   )\ )    (      ( /(       
-(()/(  )\()) )\()) ( )\ (()/(    )\     )\()) (    
- /(_))((_)\ ((_)\  )((_) /(_))((((_)(  ((_)\  )\   
-(_)) __ ((_) _((_)((_)_ (_))   )\ _ )\  _((_)((_)  
-/ __|\ \ / /| \| | | _ )| _ \  (_)_\(_)| \| || __| 
-\__ \ \ V / | .` | | _ \|   /   / _ \  | .` || _|  
+      <div class="header-inner">
+        <div class="ascii-banner" aria-hidden="true">
+          <pre>
+ (        )     )        (                 )
+ )\ )  ( /(  ( /(    (   )\ )    (      ( /(
+(()/(  )\()) )\()) ( )\ (()/(    )\     )\()) (
+ /(_))((_)\ ((_)\  )((_) /(_))((((_)(  ((_)\  )\
+(_)) __ ((_) _((_)((_)_ (_))   )\ _ )\  _((_)((_)
+/ __|\ \ / /| \| | | _ )| _ \  (_)_\(_)| \| || __|
+\__ \ \ V / | .` | | _ \|   /   / _ \  | .` || _|
 |___/  |_|  |_|\_| |___/|_|_\  /_/ \_\ |_|\_||___|
-        </pre>
+          </pre>
+        </div>
+        <button id="aboutToggle" class="about-trigger" type="button" aria-expanded="false">
+          About
+        </button>
       </div>
       <p class="meta">Seven-chord loop editor with quick synth controls.</p>
     </header>
+    <div
+      id="aboutOverlay"
+      class="about-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="aboutTitle"
+    >
+      <div class="about-panel" id="aboutPanel" tabindex="-1">
+        <div class="about-panel-header">
+          <div>
+            <p class="meta">About</p>
+            <h3 id="aboutTitle">SynBrane</h3>
+          </div>
+          <button id="closeAbout" class="ghost close-about" type="button" aria-label="Close about panel">
+            Close
+          </button>
+        </div>
+        <div class="about-body">
+          <pre class="about-text">
+SynBrane is an experimental sound engine designed to merge tuning theory, chord building, and rhythm generation into a single creative tool.
+You sculpt chords using a spiraling circular interface tuned to any temperament — 12-EDO, 19-EDO, 24-EDO, 31-EDO, 8-EDO, or any Scala tuning — and hear them instantly as harmony or as rhythm.
+Harmony Mode
+In Harmony Mode, your chord plays as a synth sound:
+Choose any temperament
+Select notes on the spiral
+Pick a root and chord preset
+Shape the sound with ADSR, waveform, detune, and filter controls
+Add arpeggiators per chord
+Preview chords or render full loops from the backend
+Harmony Mode acts like a microtonal chord workstation — but built around your tuning rather than a keyboard.
+Rhythm Mode — Turning a chord into a beat
+Rhythm Mode transforms your chord into a drum pattern.
+Instead of playing pitches, each note you select becomes a percussive voice, and the chord’s structure becomes a timing model.
+Here’s exactly how it works:
+Each selected degree becomes a trigger point.
+The degree is normalized to a fraction of one bar based on the tuning size.
+The Rhythm × slider slows everything down.
+1.00× = normal timing
+0.30× = ~3× slower (default)
+0.10× = ~10× slower (deep, slow pulses)
+This creates long, breathing rhythmic structures.
+Each degree maps to a drum type.
+Lower degrees → low drums
+Mid degrees → claps / snares
+High degrees → hats / ticks
+Kick + Snare backbone stays locked.
+Kick on beats 1/3, snare on 2/4.
+The full chord becomes a rhythmic texture.
+Every note fires at a slowed-down position in the bar, creating grooves that depend entirely on:
+temperament structure
+chord shape
+rhythmic slowdown
+tempo
+Rhythm Mode essentially asks:
+“What if your chord was your beat?”
+Looping & Composition
+Choose between 1 and 5 chords
+Each chord has its own tuning, notes, root, preset, and arpeggiator
+Loops repeat 10 times or until stopped
+Preview the loop in-browser or render a WAV through the backend
+SynBrane works like a microtonal groovebox for harmonic and rhythmic exploration.
+Patch System
+Save or load full patches as JSON containing:
+Global synth settings
+Tempo and rhythm multiplier
+Loop chord count
+All chord notes, tunings, roots, presets, and arpeggiators
+Patches behave like portable “scenes” you can reload anytime.
+Tuning Exploration
+SynBrane supports:
+8-EDO
+12-EDO
+19-EDO
+22-EDO
+24-EDO
+31-EDO
+Any Scala tuning
+The spiral redraws for each system, showing you the structure of the tuning and giving you a direct way to hear the tuning’s interval relationships — both as harmony and as rhythm.
+          </pre>
+        </div>
+      </div>
+    </div>
     <main>
       <section class="panel" id="chordsPanel">
         <div class="panel-header">
