@@ -48,6 +48,24 @@ function mapFrequenciesToRhythm(frequencies, mappingFactor) {
   return frequencies.map((freq) => Math.max(0.5, freq * RHYTHM_BASE_MAPPING * multiplier));
 }
 
+function arpeggioStepDuration(rate, bpm) {
+  const secondsPerBeat = 60 / Math.max(1, bpm || 120);
+  if (rate === '1/4') return secondsPerBeat;
+  if (rate === '1/16') return secondsPerBeat / 4;
+  return secondsPerBeat / 2;
+}
+
+function arpeggioCycle(freqs, pattern) {
+  if (!freqs?.length) return [];
+  if (pattern === 'down') return [...freqs].slice().reverse();
+  if (pattern === 'upDown') {
+    const ascent = [...freqs];
+    const descent = freqs.length > 1 ? [...freqs].slice(1, -1).reverse() : [];
+    return [...ascent, ...descent];
+  }
+  return [...freqs];
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -182,7 +200,44 @@ function addRhythmVoices(samples, startSample, sampleRate, durationSeconds, freq
   });
 }
 
-function generateChordSamples({ mode, frequencies = [], duration, sampleRate, mappingFactor, synthSettings, bpm = 120 }) {
+function generateArpeggiatedSamples({ frequencies, duration, sampleRate, synth, bpm, arpeggio }) {
+  const pattern = arpeggioCycle(frequencies, arpeggio?.pattern || 'up');
+  const stepDuration = arpeggioStepDuration(arpeggio?.rate || '1/8', bpm);
+  if (!pattern.length || !Number.isFinite(stepDuration) || stepDuration <= 0) return null;
+
+  const baseDuration = duration || 1;
+  const releaseSeconds = synth.envelope.releaseMs / 1000;
+  const totalDuration = baseDuration + releaseSeconds;
+  const totalSamples = Math.max(1, Math.floor(sampleRate * totalDuration));
+  const samples = new Float32Array(totalSamples);
+  const steps = Math.max(1, Math.floor(baseDuration / stepDuration));
+
+  for (let step = 0; step < steps; step += 1) {
+    const noteStart = step * stepDuration;
+    const remaining = baseDuration - step * stepDuration;
+    if (remaining <= 0) break;
+    const noteDuration = Math.min(stepDuration, remaining);
+    const noteTotalDuration = noteDuration + releaseSeconds;
+    const totalNoteSamples = Math.max(1, Math.floor(noteTotalDuration * sampleRate));
+    const envelope = createAdsrEnvelope(totalNoteSamples, sampleRate, noteDuration, synth.envelope);
+    const freq = pattern[step % pattern.length];
+    let phase = 0;
+    const phaseIncrement = (2 * Math.PI * freq) / sampleRate;
+    const startSample = Math.floor(noteStart * sampleRate);
+    for (let i = 0; i < totalNoteSamples && startSample + i < samples.length; i += 1) {
+      samples[startSample + i] += waveSample(phase, synth.waveform) * envelope[i] * 0.5;
+      phase += phaseIncrement;
+    }
+  }
+
+  if (synth.filter && synth.filter.cutoffHz) {
+    applyLowPassFilter(samples, sampleRate, synth.filter.cutoffHz, synth.filter.resonance);
+  }
+
+  return samples;
+}
+
+function generateChordSamples({ mode, frequencies = [], duration, sampleRate, mappingFactor, synthSettings, bpm = 120, arpeggio }) {
   if (mode === 'rhythm') {
     const totalSamples = Math.floor(sampleRate * duration);
     const samples = new Float32Array(totalSamples);
@@ -192,6 +247,17 @@ function generateChordSamples({ mode, frequencies = [], duration, sampleRate, ma
   }
 
   const synth = normalizeSynthSettings(synthSettings);
+  if (arpeggio?.enabled) {
+    const arpeggiated = generateArpeggiatedSamples({
+      frequencies,
+      duration,
+      sampleRate,
+      synth,
+      bpm,
+      arpeggio,
+    });
+    if (arpeggiated) return arpeggiated;
+  }
   const baseDuration = duration || 1;
   const releaseSeconds = synth.envelope.releaseMs / 1000;
   const totalDuration = baseDuration + releaseSeconds;
@@ -279,6 +345,7 @@ function generateSequenceSamples({ mode, events, bpm, sampleRate, mappingFactor,
       mappingFactor,
       synthSettings: normalizedSynth || synthSettings,
       bpm,
+      arpeggio: event.arpeggio,
     });
     const copyLength = Math.min(buffer.length, samples.length - startSample);
     for (let i = 0; i < copyLength; i += 1) {
@@ -314,7 +381,7 @@ function encodeWav(samples, sampleRate) {
   return buffer;
 }
 
-function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed, events, bpm, synthSettings }) {
+function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed, events, bpm, synthSettings, arpeggio }) {
   ensureDir(config.renderOutputDir);
   const sampleRate = config.renderSampleRate;
   const effectiveMapping = rhythmSpeed ?? mappingFactor;
@@ -330,6 +397,7 @@ function renderToFile({ mode, frequencies, duration, mappingFactor, rhythmSpeed,
       mappingFactor: effectiveMapping,
       synthSettings,
       bpm: bpm || 120,
+      arpeggio,
     });
   }
   applyNormalization(samples);
