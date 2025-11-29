@@ -198,7 +198,7 @@ button.secondary {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--bubble-outline, rgba(255, 255, 255, 0.08));
   background: var(--bubble-muted, #1c222d);
   display: flex;
   align-items: center;
@@ -206,7 +206,7 @@ button.secondary {
   color: var(--bubble-text, var(--text));
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease,
-    border-color 0.15s ease, color 0.15s ease;
+    border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
   font-size: 12px;
   font-weight: 600;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -214,13 +214,22 @@ button.secondary {
   backdrop-filter: blur(2px);
 }
 
+.note-point.muted {
+  opacity: 0.55;
+  filter: saturate(0.72);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
 .note-point.active {
-  background: var(--bubble-main, var(--accent));
+  background: var(--bubble-highlight, var(--accent));
   color: var(--bubble-text-strong, #0d0f13);
-  border-color: var(--bubble-main, var(--accent));
-  box-shadow: 0 0 0 1px var(--bubble-outline, var(--accent)),
-    0 10px 20px var(--bubble-shadow, rgba(90, 200, 250, 0.35));
-  transform: translateY(-1px) scale(1.03);
+  border-color: var(--bubble-outline, var(--accent));
+  box-shadow: 0 0 0 2px var(--bubble-outline, var(--accent)),
+    0 0 16px var(--bubble-glow, rgba(90, 200, 250, 0.5)),
+    0 12px 22px rgba(0, 0, 0, 0.55);
+  transform: translateY(-1px) scale(1.08);
+  opacity: 1;
 }
 
 .note-point:hover {

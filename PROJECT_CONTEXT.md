@@ -1,15 +1,15 @@
 # SynBrane project context
 
 ## Overview
-SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The browser now focuses on a streamlined two-panel layout: a **Chords** box for editing four loop chords (one at a time) using a circular note selector, and a **Synth Parameters** box for global playback controls and patch management. Chord edits are sent to the backend/audio engine for live playback or WAV renders. The top of the page carries a cyberpunk-style ASCII "SynBrane" banner above the subtitle.
+SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The browser now focuses on a streamlined two-panel layout: a **Chords** box for editing seven loop chords (one at a time) using a circular note selector, and a **Synth Parameters** box for global playback controls and patch management. Chord edits are sent to the backend/audio engine for live playback or WAV renders. The top of the page carries a cyberpunk-style ASCII "SynBrane" banner above the subtitle.
 
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
-  - Chords panel: four chord slots navigated via tabs. Each chord stores its own tuning, root, and selected degrees on a concentric circular picker that shows the octave rings (-2 to +2) for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`), extra spacing so dense temperaments like 31-EDO stay readable, and colored octave-coded bubbles (lighter tints for muted notes, brighter glows for active selections). Preset chords (major, minor, dominant 7, suspended, add9/add11/add13, etc.) remap their target intervals to the currently selected temperament, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz), and chord previews support arpeggiation and looped playback.
+  - Chords panel: seven chord slots navigated via tabs. Each chord stores its own tuning, root, and selected degrees on a concentric circular picker that shows octave rings from -1 to +1 for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`), spacing tuned for dense temperaments like 31-EDO, and temperament-specific color themes with subdued inactive bubbles and high-contrast highlighted selections. Preset chords (major, minor, dominant 7, suspended, add9/add11/add13, etc.) remap their target intervals to the currently selected temperament, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz), and chord previews support arpeggiation and looped playback.
   - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, and filter settings, plus loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments.
   - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth/preview plus per-chord tuning, root, preset id, and selected degrees. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
-  - Loop playback/render: builds a four-event sequence (one per chord) with explicit tuning ids, degree lists, and derived frequencies and sends it to `/api/render`. Chord and loop preview buttons trigger immediate Web Audio playback in the browser using the active synth/filter/envelope settings, and the same synth payload is forwarded for renders.
+  - Loop playback/render: builds a seven-event sequence (one per chord) with explicit tuning ids, degree lists, and derived frequencies and sends it to `/api/render`. Chord and loop preview buttons trigger immediate Web Audio playback in the browser using the active synth/filter/envelope settings, and the same synth payload is forwarded for renders. Loop preview timing follows a bar-based model (4/4; one bar per chord) driven by the BPM slider with a gentle rhythm multiplier.
 
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
@@ -38,10 +38,10 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 - `/api/render` now rewrites any returned `file` path to point to `/api/render-file?path=...`, and `/api/render-file` streams the actual WAV from the droplet (e.g., `http://147.182.251.148:3000/renders/...`) back to the browser over HTTPS. No droplet changes or TLS termination are required.
 
 ## Temperaments
-- EDO tunings include 12, 19, 22, 24, 31, 32 (plus 8-EDO) with temperament-specific chord presets sourced from the backend; Scala tunings come from the `scales` directory. Interval mapping in the UI uses cents approximations to highlight equivalent functions across temperaments and redraws the circle with the proper number of divisions.
+- EDO tunings include 12, 19, 22, 24, 31 (plus 8-EDO) with temperament-specific chord presets sourced from the backend; Scala tunings come from the `scales` directory. Interval mapping in the UI uses cents approximations to highlight equivalent functions across temperaments and redraws the circle with the proper number of divisions. Each temperament paints the spiral with its own color theme, and the UI no longer exposes 32-EDO.
 
 ## UI controls
-- Chords panel: four tabs labeled 1–4, active chord label, per-chord tuning select, root selector, chord preset dropdown (major/minor/dim/aug/sus/add chords), arpeggiate toggle/rate, loop toggle, circular note selector with toggleable degrees, interval/frequency readouts, Clear/Play buttons.
+- Chords panel: seven tabs labeled 1–7, active chord label, per-chord tuning select, root selector, chord preset dropdown (major/minor/dim/aug/sus/add chords), arpeggiate toggle/rate, loop toggle, circular note selector with toggleable degrees, interval/frequency readouts, Clear/Play buttons.
 - Synth Parameters: mode (harmony/rhythm), tempo (30–300 BPM), rhythm multiplier (~0.1–1.0), waveform, attack/decay/sustain/release, detune, cutoff/resonance, loop playback/render buttons, and patch Save/Load.
 - Patch JSON shape (v1):
 ```
@@ -58,11 +58,14 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
     { "tuningId": "edo:12", "root": 0, "preset": "major", "notes": [0,4,7], "arp": {"enabled": false, "pattern": "up", "rate": "1/8"} },
     { ... },
     { ... },
+    { ... },
+    { ... },
+    { ... },
     { ... }
   ]
 }
 ```
-- Loop playback uses the four chord circles as the single source of truth; no explore palette or bar-level editors remain.
+- Loop playback uses the seven chord circles as the single source of truth; no explore palette or bar-level editors remain.
 
 ## Configuration
 - Local use requires no environment variables; all defaults are hard-coded for development and adjustable via the UI.
