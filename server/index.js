@@ -150,6 +150,7 @@ async function handlePlay(req, res) {
             baseFrequency: config.baseFrequency,
           });
         }
+        const degrees = customChord?.degrees || event.customChord?.degrees || event.degrees || [];
         return {
           ...parsed,
           tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
@@ -159,6 +160,7 @@ async function handlePlay(req, res) {
           durationBars: event.durationBars || 1,
           frequencies,
           customChord,
+          degrees,
           arpeggio,
         };
       });
@@ -191,6 +193,7 @@ async function handlePlay(req, res) {
       });
     }
     const duration = body.duration || 4;
+    const degrees = (customChord?.degrees || body.customChord?.degrees || body.degrees || []);
     const playResult = await playRealtime({
       ...parsed,
       chord: body.chord,
@@ -200,6 +203,7 @@ async function handlePlay(req, res) {
       rhythmSpeed,
       bpm,
       frequencies,
+      degrees,
       synthSettings,
       loopCount,
       customChord,
@@ -242,6 +246,7 @@ async function handleRender(req, res) {
             baseFrequency: config.baseFrequency,
           });
         }
+        const degrees = customChord?.degrees || event.customChord?.degrees || event.degrees || [];
         return {
           ...parsed,
           tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
@@ -251,6 +256,7 @@ async function handleRender(req, res) {
           durationBars: event.durationBars || 1,
           frequencies,
           customChord,
+          degrees,
           arpeggio,
         };
       });
@@ -279,9 +285,11 @@ async function handleRender(req, res) {
       frequencies = chordFrequencies({ ...parsed, chord: body.chord, root: body.root || 0, baseFrequency: config.baseFrequency });
     }
     const duration = body.duration || 4;
+    const degrees = (customChord?.degrees || body.customChord?.degrees || body.degrees || []);
     const renderResult = await renderToFile({
       mode,
       frequencies,
+      degrees,
       duration,
       rhythmSpeed,
       bpm,

@@ -58,7 +58,11 @@ function runSclang(script) {
 }
 
 function mapFrequenciesToRhythm(frequencies, mappingFactor) {
-  return frequencies.map((freq) => Math.max(0.5, freq * mappingFactor));
+  const speed = Math.min(1, Math.max(0.1, Number(mappingFactor) || 0.3));
+  return frequencies.map((_, idx) => {
+    const base = 1.5 + idx * 0.6;
+    return Math.min(8, base + speed * 4);
+  });
 }
 
 function buildSynthDefBlock() {
