@@ -53,11 +53,6 @@ const player = document.getElementById('player');
 const savePatchBtn = document.getElementById('savePatch');
 const loadPatchBtn = document.getElementById('loadPatch');
 const patchFileInput = document.getElementById('patchFile');
-const aboutToggle = document.getElementById('aboutToggle');
-const aboutOverlay = document.getElementById('aboutOverlay');
-const aboutPanel = document.getElementById('aboutPanel');
-const closeAboutBtn = document.getElementById('closeAbout');
-
 const NOTE_NAMES_12 = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const CHORD_PRESETS = [
@@ -138,44 +133,6 @@ function waveformToOscType(waveform) {
 
 function updateStatus(text) {
   statusEl.textContent = text || '';
-}
-
-function setAboutVisibility(isOpen) {
-  if (!aboutOverlay) return;
-  if (isOpen) {
-    aboutOverlay.classList.remove('hidden');
-    document.body.classList.add('modal-open');
-    aboutToggle?.setAttribute('aria-expanded', 'true');
-    setTimeout(() => aboutPanel?.focus(), 10);
-  } else {
-    aboutOverlay.classList.add('hidden');
-    document.body.classList.remove('modal-open');
-    aboutToggle?.setAttribute('aria-expanded', 'false');
-    aboutToggle?.focus();
-  }
-}
-
-function attachAboutListeners() {
-  if (!aboutToggle || !aboutOverlay) return;
-
-  aboutToggle.addEventListener('click', () => {
-    const isOpen = !aboutOverlay.classList.contains('hidden');
-    setAboutVisibility(!isOpen);
-  });
-
-  closeAboutBtn?.addEventListener('click', () => setAboutVisibility(false));
-
-  aboutOverlay.addEventListener('click', (event) => {
-    if (event.target === aboutOverlay) {
-      setAboutVisibility(false);
-    }
-  });
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !aboutOverlay.classList.contains('hidden')) {
-      setAboutVisibility(false);
-    }
-  });
 }
 
 function getTuning(id) {
@@ -1262,7 +1219,6 @@ function loadPatch(file) {
 }
 
 async function init() {
-  attachAboutListeners();
   attachControlListeners();
   syncSynthLabels();
   renderPresetOptions();
