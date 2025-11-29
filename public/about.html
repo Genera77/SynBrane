@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About | SynBrane</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="static-page">
+    <header>
+      <div class="header-inner">
+        <div class="ascii-banner" aria-hidden="true">
+          <pre>
+ (        )     )        (                 )
+ )\ )  ( /(  ( /(    (   )\ )    (      ( /(
+(()/(  )\()) )\()) ( )\ (()/(    )\     )\()) (
+ /(_))((_)\ ((_)\  )((_) /(_))((((_)(  ((_)\  )\
+(_)) __ ((_) _((_)((_)_ (_))   )\ _ )\  _((_)((_)
+/ __|\ \ / /| \| | | _ )| _ \  (_)_\(_)| \| || __|
+\__ \ \ V / | .` | | _ \|   /   / _ \  | .` || _|
+|___/  |_|  |_|\_| |___/|_|_\  /_/ \_\ |_|\_||___|
+          </pre>
+        </div>
+        <a class="about-trigger" href="/">Home</a>
+      </div>
+      <p class="meta">Seven-chord loop editor with quick synth controls.</p>
+    </header>
+
+    <main>
+      <section class="content-card">
+        <div class="section-header">
+          <p class="meta">About</p>
+          <h1>SynBrane</h1>
+        </div>
+        <p>
+          SynBrane is an experimental sound engine designed to merge tuning theory, chord building, and rhythm
+          generation into a single creative tool.
+        </p>
+        <p>
+          You sculpt chords using a spiraling circular interface tuned to any temperament — 12-EDO, 19-EDO, 24-EDO,
+          31-EDO, 8-EDO, or any Scala tuning — and hear them instantly as harmony or as rhythm.
+        </p>
+
+        <h2>Harmony Mode</h2>
+        <p>In Harmony Mode, your chord plays as a synth sound:</p>
+        <ul>
+          <li>Choose any temperament</li>
+          <li>Select notes on the spiral</li>
+          <li>Pick a root and chord preset</li>
+          <li>Shape the sound with ADSR, waveform, detune, and filter controls</li>
+          <li>Add arpeggiators per chord</li>
+          <li>Preview chords or render full loops from the backend</li>
+        </ul>
+        <p>Harmony Mode acts like a microtonal chord workstation — but built around your tuning rather than a keyboard.</p>
+
+        <h2>Rhythm Mode — Turning a chord into a beat</h2>
+        <p>Rhythm Mode transforms your chord into a drum pattern.</p>
+        <p>
+          Instead of playing pitches, each note you select becomes a percussive voice, and the chord’s structure becomes
+          a timing model.
+        </p>
+
+        <h3>Here’s exactly how it works:</h3>
+        <ul>
+          <li>Each selected degree becomes a trigger point.</li>
+          <li>The degree is normalized to a fraction of one bar based on the tuning size.</li>
+        </ul>
+        <p>The Rhythm × slider slows everything down.</p>
+        <ul>
+          <li>1.00× = normal timing</li>
+          <li>0.30× = ~3× slower (default)</li>
+          <li>0.10× = ~10× slower (deep, slow pulses)</li>
+        </ul>
+        <p>This creates long, breathing rhythmic structures.</p>
+        <p>Each degree maps to a drum type.</p>
+        <ul>
+          <li>Lower degrees → low drums</li>
+          <li>Mid degrees → claps / snares</li>
+          <li>High degrees → hats / ticks</li>
+        </ul>
+        <p>Kick + Snare backbone stays locked.</p>
+        <p>Kick on beats 1/3, snare on 2/4.</p>
+        <p>The full chord becomes a rhythmic texture.</p>
+        <p>
+          Every note fires at a slowed-down position in the bar, creating grooves that depend entirely on:
+        </p>
+        <ul>
+          <li>temperament structure</li>
+          <li>chord shape</li>
+          <li>rhythmic slowdown</li>
+          <li>tempo</li>
+        </ul>
+        <p>Rhythm Mode essentially asks:</p>
+        <p>“What if your chord was your beat?”</p>
+
+        <h2>Looping &amp; Composition</h2>
+        <ul>
+          <li>Choose between 1 and 5 chords</li>
+          <li>Each chord has its own tuning, notes, root, preset, and arpeggiator</li>
+          <li>Loops repeat 10 times or until stopped</li>
+          <li>Preview the loop in-browser or render a WAV through the backend</li>
+        </ul>
+        <p>SynBrane works like a microtonal groovebox for harmonic and rhythmic exploration.</p>
+
+        <h2>Patch System</h2>
+        <p>Save or load full patches as JSON containing:</p>
+        <ul>
+          <li>Global synth settings</li>
+          <li>Tempo and rhythm multiplier</li>
+          <li>Loop chord count</li>
+          <li>All chord notes, tunings, roots, presets, and arpeggiators</li>
+        </ul>
+        <p>Patches behave like portable “scenes” you can reload anytime.</p>
+
+        <h2>Tuning Exploration</h2>
+        <p>SynBrane supports:</p>
+        <ul>
+          <li>8-EDO</li>
+          <li>12-EDO</li>
+          <li>19-EDO</li>
+          <li>22-EDO</li>
+          <li>24-EDO</li>
+          <li>31-EDO</li>
+          <li>Any Scala tuning</li>
+        </ul>
+        <p>
+          The spiral redraws for each system, showing you the structure of the tuning and giving you a direct way to hear
+          the tuning’s interval relationships — both as harmony and as rhythm.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
