@@ -102,6 +102,17 @@ const defaultSynth = {
     return Math.min(1, Math.max(0.1, Number(value) || 0.3));
   }
 
+const OSC_TYPE_MAP = {
+  sine: 'sine',
+  square: 'square',
+  saw: 'sawtooth',
+  triangle: 'triangle',
+};
+
+function waveformToOscType(waveform) {
+  return OSC_TYPE_MAP[waveform] || 'sine';
+}
+
 function updateStatus(text) {
   statusEl.textContent = text || '';
 }
@@ -554,7 +565,8 @@ function scheduleChordPreview(chord, startTime, durationSec) {
 
   freqs.forEach((freq, idx) => {
     const osc = ctx.createOscillator();
-    osc.type = state.synth.waveform || 'sine';
+    const oscType = waveformToOscType(state.synth.waveform || defaultSynth.waveform);
+    osc.type = oscType;
     osc.frequency.setValueAtTime(freq, startTime);
     const detuneRange = getDegreeSpan(tuning) > 12 ? state.synth.detuneCents || 0 : 0;
     const detune = detuneRange ? (Math.random() * 2 - 1) * detuneRange : 0;
