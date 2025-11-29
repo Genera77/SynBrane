@@ -1,15 +1,15 @@
 # SynBrane project context
 
 ## Overview
-SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The browser now focuses on a streamlined two-panel layout: a **Chords** box for editing four loop chords (one at a time) using a circular note selector, and a **Synth Parameters** box for global playback controls and patch management. Chord edits are sent to the backend/audio engine for live playback or WAV renders.
+SynBrane is an experimental music tool pairing a lightweight browser UI with a Node.js backend. The browser now focuses on a streamlined two-panel layout: a **Chords** box for editing four loop chords (one at a time) using a circular note selector, and a **Synth Parameters** box for global playback controls and patch management. Chord edits are sent to the backend/audio engine for live playback or WAV renders. The top of the page carries a cyberpunk-style ASCII "SynBrane" banner above the subtitle.
 
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
   - Chords panel: four chord slots navigated via tabs. Each chord stores its own tuning and a set of active degrees selected on a circular picker (12 labeled note names for 12-EDO; numeric degree labels for other EDO/Scala tunings). Only one chord editor is visible at a time.
-  - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, and filter settings, plus loop playback/render buttons.
-  - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth plus per-chord tuning and selected degrees. Load applies a JSON patch and updates the UI.
-  - Loop playback/render: builds a four-event sequence (one per chord) with explicit tuning ids, degree lists, and derived frequencies and sends it to `/api/play` or `/api/render`.
+  - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, and filter settings, plus loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers.
+  - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth plus per-chord tuning and selected degrees. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
+  - Loop playback/render: builds a four-event sequence (one per chord) with explicit tuning ids, degree lists, and derived frequencies and sends it to `/api/play` or `/api/render`. Chord and loop preview buttons now trigger immediate Web Audio playback in the browser using the active synth/filter/envelope settings (while still sending `/api/play` in the background for parity).
 
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
@@ -27,8 +27,8 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 ## Audio behavior
 - **Harmony mode (Node DSP)**: oscillator waveforms (sine/saw/square), ADSR envelope, optional resonant low-pass filter, and loudness normalized around -4 dBFS. Arpeggio patterns are present in the backend but the current UI sends stacked chord events.
-- **Rhythm mode (Node DSP)**: drum-like hits with overtone partials and saturation. Rhythm-speed slider maps pitch to beat rate (2.0–5.0).
-- **Browser preview** mirrors these designs when previewing through the backend endpoints.
+  - **Rhythm mode (Node DSP)**: drum-like hits with overtone partials and saturation. Rhythm-speed slider now spans roughly 0.1–1.0× to slow or subtly accelerate patterns.
+- **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews while still calling backend play endpoints for parity.
 
 ## Deployment model
 - Backend (Node + audio engine) runs on a DigitalOcean droplet at `http://147.182.251.148:3000`.
@@ -39,15 +39,15 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 ## UI controls
 - Chords panel: four tabs labeled 1–4, active chord label, per-chord tuning select, circular note selector with toggleable degrees, Clear/Play buttons.
-- Synth Parameters: mode (harmony/rhythm), tempo (30–300 BPM), rhythm multiplier (2.0–5.0), waveform, attack/decay/sustain/release, cutoff/resonance, loop playback/render buttons, and patch Save/Load.
+- Synth Parameters: mode (harmony/rhythm), tempo (30–300 BPM), rhythm multiplier (~0.1–1.0), waveform, attack/decay/sustain/release, cutoff/resonance, loop playback/render buttons, and patch Save/Load.
 - Patch JSON shape (v1):
 ```
 {
   "version": 1,
   "global": {
-    "mode": "harmony",
-    "tempo": 120,
-    "rhythmMultiplier": 3,
+      "mode": "harmony",
+      "tempo": 120,
+      "rhythmMultiplier": 0.3,
     "synth": { "waveform": "saw", "envelope": { ... }, "filter": { ... } }
   },
   "chords": [

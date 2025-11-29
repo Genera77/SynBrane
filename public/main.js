@@ -66,7 +66,7 @@ const state = {
   chords: Array.from({ length: 4 }, () => ({ tuningId: null, notes: [0, 4, 7] })),
   mode: 'harmony',
   bpm: 120,
-  rhythmSpeed: 3,
+  rhythmSpeed: 0.3,
   synth: JSON.parse(JSON.stringify(defaultSynth)),
   loopPreview: { ctx: null, timer: null, stop: false },
 };
@@ -296,29 +296,101 @@ function chordToEvent(chord, index) {
   };
 }
 
+function getPreviewContext() {
+  if (state.loopPreview.ctx) {
+    return state.loopPreview.ctx;
+  }
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  state.loopPreview.ctx = new AudioCtx();
+  state.loopPreview.stop = false;
+  return state.loopPreview.ctx;
+}
+
+function applyEnvelope(gainNode, ctx, startTime, durationSec, envelope) {
+  const attack = Math.max(0, (envelope.attackMs || 0) / 1000);
+  const decay = Math.max(0, (envelope.decayMs || 0) / 1000);
+  const sustain = Math.max(0, Math.min(1, envelope.sustainLevel ?? 0.7));
+  const release = Math.max(0, (envelope.releaseMs || 0) / 1000);
+
+  gainNode.gain.setValueAtTime(0, startTime);
+  gainNode.gain.linearRampToValueAtTime(1, startTime + attack);
+  gainNode.gain.linearRampToValueAtTime(sustain, startTime + attack + decay);
+  gainNode.gain.setValueAtTime(sustain, startTime + durationSec);
+  gainNode.gain.linearRampToValueAtTime(0, startTime + durationSec + release);
+
+  return durationSec + release;
+}
+
+function scheduleChordPreview(chord, startTime, durationSec) {
+  const tuning = getTuning(chord.tuningId);
+  if (!tuning) throw new Error('Chord missing tuning');
+  if (!chord.notes?.length) throw new Error('Chord has no notes');
+
+  const ctx = getPreviewContext();
+  const envelope = state.synth.envelope || defaultSynth.envelope;
+  const filterCfg = state.synth.filter || {};
+  const freqs = chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg));
+
+  freqs.forEach((freq) => {
+    const osc = ctx.createOscillator();
+    osc.type = state.synth.waveform || 'sine';
+    osc.frequency.setValueAtTime(freq, startTime);
+
+    const gain = ctx.createGain();
+    let lastNode = osc;
+
+    if (filterCfg.cutoffHz) {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(filterCfg.cutoffHz, startTime);
+      const resonance = Math.max(0.0001, filterCfg.resonance || 0);
+      filter.Q.setValueAtTime(resonance * 12 + 0.0001, startTime);
+      lastNode.connect(filter);
+      lastNode = filter;
+    }
+
+    const totalDuration = applyEnvelope(gain, ctx, startTime, durationSec, envelope);
+    lastNode.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(startTime);
+    osc.stop(startTime + totalDuration + 0.05);
+  });
+
+  const releaseSec = Math.max(0, (state.synth.envelope?.releaseMs || 0) / 1000);
+  return durationSec + releaseSec;
+}
+
 async function playChord(index) {
   try {
+    stopPreview();
     const chord = state.chords[index];
-    const event = chordToEvent(chord, index);
+    ensureChordComplete(chord, index);
+
+    const ctx = getPreviewContext();
+    const startTime = ctx.currentTime + 0.05;
+    const sustainDuration = 1;
+    const total = scheduleChordPreview(chord, startTime, sustainDuration);
+
+    updateStatus(`Previewing chord ${index + 1}`);
+    state.loopPreview.timer = setTimeout(() => stopPreview('Preview ended'), (total + 0.2) * 1000);
+
     const payload = {
-      tuningId: event.tuningId,
-      chord: event.chord,
+      tuningId: chord.tuningId,
+      chord: { id: `circle-${index}`, degrees: [...chord.notes] },
       chordType: 'custom',
-      root: event.root,
-      frequencies: event.frequencies,
+      root: 0,
+      frequencies: chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg)),
       mode: state.mode,
       bpm: state.bpm,
       rhythmSpeed: state.rhythmSpeed,
       synthSettings: state.synth,
     };
-    const res = await fetch(apiUrl('/api/play'), {
+    fetch(apiUrl('/api/play'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    updateStatus(`Played chord ${index + 1}`);
+    }).catch(() => {});
   } catch (error) {
     updateStatus(error.message);
     // eslint-disable-next-line no-console
@@ -340,15 +412,36 @@ function buildLoopPayload() {
 
 async function playLoop() {
   try {
+    stopPreview();
     const payload = buildLoopPayload();
-    const res = await fetch(apiUrl('/api/play'), {
+
+    const ctx = getPreviewContext();
+    const beatsPerBar = 4;
+    const baseBeatSeconds = 60 / Math.max(1, state.bpm);
+    const speedMultiplier = Math.max(0.0001, state.rhythmSpeed || 1);
+    const barDuration = (baseBeatSeconds * beatsPerBar) / speedMultiplier;
+    const startTime = ctx.currentTime + 0.1;
+
+    let longest = 0;
+    state.chords.forEach((chord, idx) => {
+      ensureChordComplete(chord, idx);
+      const chordStart = startTime + idx * barDuration;
+      const chordDuration = Math.max(0.2, barDuration * 0.9);
+      const total = scheduleChordPreview(chord, chordStart, chordDuration);
+      longest = Math.max(longest, idx * barDuration + total);
+    });
+
+    state.loopPreview.timer = setTimeout(
+      () => stopPreview('Loop preview finished'),
+      (longest + 0.3) * 1000,
+    );
+    updateStatus('Loop previewing');
+
+    fetch(apiUrl('/api/play'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    updateStatus('Loop playing');
+    }).catch(() => {});
   } catch (error) {
     updateStatus(error.message);
     // eslint-disable-next-line no-console
@@ -390,6 +483,7 @@ function stopPreview(reason) {
     state.loopPreview.ctx.close();
     state.loopPreview.ctx = null;
   }
+  state.loopPreview.stop = true;
   if (reason) updateStatus(reason);
 }
 
@@ -442,7 +536,10 @@ function applyPatch(data) {
   if (data.global) {
     state.mode = data.global.mode || state.mode;
     state.bpm = Number(data.global.tempo || state.bpm);
-    state.rhythmSpeed = Number(data.global.rhythmMultiplier || state.rhythmSpeed);
+    const minRhythm = Number(rhythmInput.min) || 0;
+    const maxRhythm = Number(rhythmInput.max) || Infinity;
+    const nextRhythm = Number(data.global.rhythmMultiplier ?? state.rhythmSpeed);
+    state.rhythmSpeed = Math.min(maxRhythm, Math.max(minRhythm, nextRhythm));
     if (data.global.synth) {
       state.synth = {
         waveform: data.global.synth.waveform || state.synth.waveform,
