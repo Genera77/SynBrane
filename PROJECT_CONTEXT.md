@@ -5,7 +5,7 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 ## Architecture
 - **Frontend** (`public/`)
-  - Plain HTML/CSS/JS served by the backend.
+  - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
   - Chords panel: four chord slots navigated via tabs. Each chord stores its own tuning and a set of active degrees selected on a circular picker (12 labeled note names for 12-EDO; numeric degree labels for other EDO/Scala tunings). Only one chord editor is visible at a time.
   - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, and filter settings, plus loop playback/render buttons.
   - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth plus per-chord tuning and selected degrees. Load applies a JSON patch and updates the UI.
@@ -29,6 +29,12 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 - **Harmony mode (Node DSP)**: oscillator waveforms (sine/saw/square), ADSR envelope, optional resonant low-pass filter, and loudness normalized around -4 dBFS. Arpeggio patterns are present in the backend but the current UI sends stacked chord events.
 - **Rhythm mode (Node DSP)**: drum-like hits with overtone partials and saturation. Rhythm-speed slider maps pitch to beat rate (2.0–5.0).
 - **Browser preview** mirrors these designs when previewing through the backend endpoints.
+
+## Deployment model
+- Backend (Node + audio engine) runs on a DigitalOcean droplet at `http://147.182.251.148:3000`.
+- Frontend is hosted on Vercel at `https://syn-brane.vercel.app`.
+- Vercel exposes API proxy routes (`/api/tunings`, `/api/chords`, `/api/play`, `/api/render`) that forward requests to the droplet (`http://147.182.251.148:3000/api/...`) and return the responses to the browser.
+- The browser only calls these relative APIs via `apiUrl('/api/...')`, so all requests stay on the Vercel origin and avoid mixed-content issues while the server-to-server hop uses HTTP.
 
 ## UI controls
 - Chords panel: four tabs labeled 1–4, active chord label, per-chord tuning select, circular note selector with toggleable degrees, Clear/Play buttons.
@@ -55,16 +61,7 @@ SynBrane is an experimental music tool pairing a lightweight browser UI with a N
 
 ## Configuration
 - Local use requires no environment variables; all defaults are hard-coded for development and adjustable via the UI.
-- Frontend API base: all browser fetches go through a global `API_BASE` constant defined in `public/main.js`, which reads from `window.SYNBRANE_API_BASE` when present and otherwise defaults to an empty string for relative calls (suitable for local development).
-- In production (e.g., Vercel), set `window.SYNBRANE_API_BASE` in `index.html` or an injected script to point at the external backend (such as a DigitalOcean deployment):
-
-  ```html
-  <script>
-    window.SYNBRANE_API_BASE = "https://your-digitalocean-backend-url.com";
-  </script>
-  ```
-
-  With a backend at `https://my-synbrane-backend.example.com`, frontend calls like `fetch(apiUrl('/api/tunings'))` will request `https://my-synbrane-backend.example.com/api/tunings`.
+- Frontend API base: all browser fetches go through a global `API_BASE` constant defined in `public/main.js`, which defaults to an empty string so requests use the same-origin Vercel proxy routes. A `window.SYNBRANE_API_BASE` override is available for local development if you need to target a different backend directly.
 - Optional environment variables remain supported for overrides:
   - `PORT` (default `3000`)
   - `HOST` (default `0.0.0.0`)
