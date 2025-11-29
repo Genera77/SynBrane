@@ -6,14 +6,10 @@
     <title>SynBrane</title>
     <link rel="stylesheet" href="/styles.css" />
 
-    <!-- Backend API base URL: replace with your DigitalOcean backend address -->
+    <!-- Optional override for local development -->
     <script>
-      // In production on Vercel, point this to your DigitalOcean backend.
-      // Example:
-      //   window.SYNBRANE_API_BASE = "http://YOUR_DROPLET_IP:3000";
-      // or once you have a domain + HTTPS:
-      //   window.SYNBRANE_API_BASE = "https://api.your-domain.com";
-      window.SYNBRANE_API_BASE = "http://147.182.251.148:3000";
+      // When running locally against a custom backend, uncomment and update:
+      // window.SYNBRANE_API_BASE = "http://localhost:3000";
     </script>
   </head>
   <body>
