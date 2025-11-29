@@ -351,6 +351,26 @@ button.secondary {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
 }
 
+.static-page .content-card.centered {
+  text-align: center;
+  align-items: center;
+}
+
+.static-page .content-card.centered .section-header {
+  align-items: center;
+}
+
+.static-page .content-card.centered p {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.static-page .content-card.centered ul {
+  text-align: left;
+  margin: 8px auto 0 auto;
+}
+
 .static-page h1 {
   margin: 0;
   font-size: 24px;
