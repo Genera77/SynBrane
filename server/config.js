@@ -28,7 +28,7 @@ function loadEnv() {
 loadEnv();
 
 const config = {
-  port: parseInt(process.env.PORT, 10) || 3000,
+  port: parseInt(process.env.PORT, 10) || 3001,
   host: process.env.HOST || '0.0.0.0',
   baseFrequency: parseFloat(process.env.BASE_FREQUENCY) || 440,
   renderOutputDir: process.env.RENDER_OUTPUT_DIR || path.join(process.cwd(), 'renders'),
