@@ -9,7 +9,7 @@ Experimental music workbench for exploring alternative tunings, browsing chords,
    ```bash
    npm run dev
    ```
-4. Open the reported URL (default http://localhost:3000) to use the UI.
+4. Open the reported URL (default http://localhost:3001) to use the UI.
 
 ## Documentation
 See `PROJECT_CONTEXT.md` for architecture notes, API endpoints, environment variables, and TODOs.

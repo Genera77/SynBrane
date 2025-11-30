@@ -34,11 +34,11 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 - **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews without relying on backend playback. The preview path supports per-chord arpeggiated or looped chords with per-note detune for smoother stacks.
 
 ## Deployment model
-- Backend (Node + audio engine) runs on a DigitalOcean droplet at `http://147.182.251.148:3000`.
+- Backend (Node + audio engine) runs on a DigitalOcean droplet at `http://147.182.251.148:3001`.
 - Frontend is hosted on Vercel at `https://syn-brane.vercel.app`.
-- Vercel exposes API proxy routes (`/api/tunings`, `/api/chords`, `/api/play`, `/api/render`) that forward requests to the droplet (`http://147.182.251.148:3000/api/...`) and return the responses to the browser.
+- Vercel exposes API proxy routes (`/api/tunings`, `/api/chords`, `/api/play`, `/api/render`) that forward requests to the droplet (`http://147.182.251.148:3001/api/...`) and return the responses to the browser.
 - The browser only calls these relative APIs via `apiUrl('/api/...')`, so all requests stay on the Vercel origin and avoid mixed-content issues while the server-to-server hop uses HTTP.
-- `/api/render` now rewrites any returned `file` path to point to `/api/render-file?path=...`, and `/api/render-file` streams the actual WAV from the droplet (e.g., `http://147.182.251.148:3000/renders/...`) back to the browser over HTTPS. No droplet changes or TLS termination are required.
+- `/api/render` now rewrites any returned `file` path to point to `/api/render-file?path=...`, and `/api/render-file` streams the actual WAV from the droplet (e.g., `http://147.182.251.148:3001/renders/...`) back to the browser over HTTPS. No droplet changes or TLS termination are required.
 
 ## Temperaments
 - EDO tunings include 12, 19, 22, 24, 31, Orwell-9, and 8-EDO with temperament-specific chord presets sourced from the backend; Scala tunings come from the `scales` directory. Interval mapping in the UI uses cents approximations to highlight equivalent functions across temperaments and redraws the circle with the proper number of divisions. Each temperament paints the spiral with its own color theme, and the UI no longer exposes 32-EDO.
@@ -70,7 +70,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 - Local use requires no environment variables; all defaults are hard-coded for development and adjustable via the UI.
 - Frontend API base: all browser fetches go through a global `API_BASE` constant defined in `public/main.js`, which defaults to an empty string so requests use the same-origin Vercel proxy routes. A `window.SYNBRANE_API_BASE` override is available for local development if you need to target a different backend directly.
 - Optional environment variables remain supported for overrides:
-  - `PORT` (default `3000`)
+  - `PORT` (default `3001`)
   - `HOST` (default `0.0.0.0`)
   - `BASE_FREQUENCY` (default `440`)
   - `SCALES_DIR` (default `<repo>/scales`)
