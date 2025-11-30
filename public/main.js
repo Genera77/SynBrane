@@ -224,6 +224,21 @@ function findPreset(tuningId, presetId) {
   return getPresetList(tuningId).find((preset) => preset.id === presetId);
 }
 
+function presetDegreeLabel(preset) {
+  const degrees = Array.isArray(preset?.degrees)
+    ? preset.degrees.map((deg) => Number(deg) + 1)
+    : [];
+  return degrees.length ? ` (${degrees.join(',')})` : '';
+}
+
+function displayPresetLabel(preset) {
+  if (!preset) return '';
+  const degreeText = presetDegreeLabel(preset);
+  if (!degreeText) return preset.label;
+  const strippedLabel = preset.label.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  return `${strippedLabel}${degreeText}`;
+}
+
 function applyPresetToChord(chord, preset) {
   if (!chord || !preset) return;
   const root = chord.root || 0;
@@ -312,7 +327,9 @@ function renderPresetOptions() {
   presets.forEach((preset) => {
     const opt = document.createElement('option');
     opt.value = preset.id;
-    opt.textContent = preset.label;
+    const displayLabel = displayPresetLabel(preset);
+    opt.textContent = displayLabel;
+    opt.title = displayLabel;
     chordPreset.appendChild(opt);
   });
   if (!presets.find((p) => p.id === chord.preset) && presets[0]) {
@@ -1415,7 +1432,7 @@ async function init() {
   loopChord.checked = state.preview.loop;
   const res = await fetch(apiUrl('/api/tunings'));
   const data = await res.json();
-  state.tunings = (data.tunings || []).filter((tuning) => !(tuning.type === 'edo' && Number(tuning.value) === 32));
+  state.tunings = data.tunings || [];
   state.baseFrequency = data.baseFrequency || 440;
   state.chords.forEach((chord) => {
     chord.tuningId = chord.tuningId || state.tunings[0]?.id || null;
