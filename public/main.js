@@ -234,14 +234,16 @@ function formatDegreeList(degrees = []) {
   return normalized.length ? normalized.join(', ') : '';
 }
 
-function presetDegreeLabel(preset) {
+function presetDegreeLabel(preset, tuning) {
+  const is12Edo = tuning?.type === 'edo' && tuning?.value === 12;
+  if (is12Edo) return ' ()';
   const degrees = formatDegreeList(preset?.degrees);
   return degrees ? ` (${degrees})` : '';
 }
 
-function displayPresetLabel(preset) {
+function displayPresetLabel(preset, tuning) {
   if (!preset) return '';
-  const degreeText = presetDegreeLabel(preset);
+  const degreeText = presetDegreeLabel(preset, tuning);
   if (!degreeText) return preset.label;
   const strippedLabel = preset.label.replace(/\s*\([^)]*\)\s*$/, '').trim();
   return `${strippedLabel}${degreeText}`;
@@ -322,6 +324,7 @@ function renderTuningOptions() {
 function renderPresetOptions() {
   chordPreset.innerHTML = '';
   const chord = state.chords[state.activeChord];
+  const tuning = getTuning(chord.tuningId);
   const presets = getPresetList(chord.tuningId);
   if (!presets.length) {
     const opt = document.createElement('option');
@@ -335,7 +338,7 @@ function renderPresetOptions() {
   presets.forEach((preset) => {
     const opt = document.createElement('option');
     opt.value = preset.id;
-    const displayLabel = displayPresetLabel(preset);
+    const displayLabel = displayPresetLabel(preset, tuning);
     opt.textContent = displayLabel;
     opt.title = displayLabel;
     chordPreset.appendChild(opt);
