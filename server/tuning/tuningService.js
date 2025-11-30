@@ -179,7 +179,7 @@ function tuningRoots({ tuningType, tuningValue, rootCount }) {
   }
   const degreeCount = tuningType === 'edo' ? tuningValue : tuningValue;
   const count = rootCount || degreeCount * (tuningType === 'edo' ? 2 : 1) || 24;
-  return Array.from({ length: count }, (_, index) => ({ value: index, label: `Degree ${index}` }));
+  return Array.from({ length: count }, (_, index) => ({ value: index, label: `Degree ${index + 1}` }));
 }
 
 function nearestScalaDegree(intervals = [], cents) {
