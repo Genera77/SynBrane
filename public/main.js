@@ -224,11 +224,19 @@ function findPreset(tuningId, presetId) {
   return getPresetList(tuningId).find((preset) => preset.id === presetId);
 }
 
-function presetDegreeLabel(preset) {
-  const degrees = Array.isArray(preset?.degrees)
-    ? preset.degrees.map((deg) => Number(deg) + 1)
+function formatDegreeList(degrees = []) {
+  const normalized = Array.isArray(degrees)
+    ? degrees
+        .map((deg) => Number(deg))
+        .filter((deg) => Number.isFinite(deg))
+        .map((deg) => deg + 1)
     : [];
-  return degrees.length ? ` (${degrees.join(',')})` : '';
+  return normalized.length ? normalized.join(', ') : '';
+}
+
+function presetDegreeLabel(preset) {
+  const degrees = formatDegreeList(preset?.degrees);
+  return degrees ? ` (${degrees})` : '';
 }
 
 function displayPresetLabel(preset) {
@@ -500,7 +508,7 @@ function buildSpiral(tuning) {
     point.style.setProperty('--bubble-shadow', palette.shadow);
     point.style.setProperty('--bubble-outline', palette.outline);
     point.style.setProperty('--note-transform', `translate(${x}px, ${y}px) translate(-50%, -50%)`);
-    point.title = `Degree ${degreeInOctave} (oct +${octaveIndex})`;
+    point.title = `Degree ${degreeInOctave + 1} (oct +${octaveIndex})`;
     point.textContent = degreeLabel(tuning, degreeInOctave, chord.root || 0);
     point.onclick = () => {
       const activeChord = state.chords[state.activeChord];
