@@ -114,9 +114,15 @@ function handleTunings(req, res) {
 
 function handleChords(req, res, query) {
   const tuningId = query.tuningId;
+  if (tuningId) {
+    const { chords, roots } = chordsForTuning({ tuningId });
+    sendJson(res, 200, { chords, roots });
+    return;
+  }
+
   const tuningType = query.tuningType || 'edo';
   const tuningValue = tuningType === 'edo' ? parseInt(query.tuningValue || '12', 10) : query.tuningValue;
-  const { chords, roots } = chordsForTuning({ tuningId, tuningType, tuningValue });
+  const { chords, roots } = chordsForTuning({ tuningType, tuningValue });
   sendJson(res, 200, { chords, roots });
 }
 
