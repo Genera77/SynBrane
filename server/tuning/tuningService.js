@@ -229,6 +229,17 @@ function mapUniversalPresetsToTuning({ tuningType, tuningValue, intervals, tunin
   }));
 }
 
+function dedupeChordPresets(chords = []) {
+  const seen = new Set();
+  return chords.filter((chord) => {
+    const degrees = Array.isArray(chord.degrees) ? chord.degrees.slice().sort((a, b) => a - b) : [];
+    const key = degrees.join(',');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function temperamentSpecificForTuning(tuningId, tuningValue) {
   const direct = TEMPERAMENT_SPECIFIC[tuningId];
   if (direct) return direct;
@@ -323,7 +334,7 @@ function chordsForEdo(tuningValue, tuningId) {
   const specific = temperamentSpecificForTuning(tuningId || `edo:${tuningValue}`, tuningValue);
   const meta = EDO_TUNINGS.find((edo) => edo.id === tuningId) || EDO_TUNINGS.find((edo) => edo.value === tuningValue);
   return {
-    chords: [...universal, ...specific],
+    chords: dedupeChordPresets([...specific, ...universal]),
     roots: tuningRoots({ tuningType: 'edo', tuningValue, rootCount: meta?.rootCount }),
   };
 }
@@ -340,7 +351,7 @@ function chordsForTuning({ tuningId, tuningType: rawType, tuningValue: rawValue 
     const span = selected.intervals?.length || selected.count || 12;
     const universal = mapUniversalPresetsToTuning({ tuningType, tuningValue: span, intervals: selected.intervals, tuningId });
     const scalaChords = generateScalaSpecificChords(selected.intervals, selected.name);
-    return { chords: [...universal, ...scalaChords], roots: tuningRoots({ tuningType, tuningValue: span }) };
+    return { chords: dedupeChordPresets([...scalaChords, ...universal]), roots: tuningRoots({ tuningType, tuningValue: span }) };
   }
   return { chords: [], roots: [] };
 }

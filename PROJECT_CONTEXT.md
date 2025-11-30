@@ -17,7 +17,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
     - `GET /api/tunings` — returns available tunings (EDO presets + Scala discoveries) with ids, type, value, label, description, intervals, and base frequency metadata. Orwell-9 (`edo:9-orwell`) ships as a first-class EDO option.
-    - `GET /api/chords?tuningId=...` — returns chord options and root labels for the selected tuning. Universal presets map ratio/cents shapes into any temperament; temperament-specific presets cover 8/12/19/22/24/31-EDO plus Orwell-9, and Scala tunings generate modal triads/tetrads, fifth stacks, and step-weave voicings. Legacy `tuningType`/`tuningValue` query params still work.
+    - `GET /api/chords?tuningId=...` — returns chord options and root labels for the selected tuning. Universal presets map ratio/cents shapes into any temperament; temperament-specific presets cover 8/12/19/22/24/31-EDO plus Orwell-9, and Scala tunings generate modal triads/tetrads, fifth stacks, and step-weave voicings. Legacy `tuningType`/`tuningValue` query params still work. Degree-equivalent presets are deduplicated per temperament (keeping temperament-specific shapes first) so each tuning shows a unique set of chord options.
     - `POST /api/play` — triggers playback (single chord or a sequence) through the active audio engine, carrying synth settings when provided.
     - `POST /api/render` — renders a single chord or a multi-bar sequence to WAV with the requested synth/rhythm settings and returns the file URL.
   - Serves static assets from `public/` and rendered files from `RENDER_OUTPUT_DIR`.
