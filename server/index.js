@@ -13,7 +13,6 @@ const {
 const { renderToFile, playRealtime } = require('./audio');
 
 const publicDir = path.join(process.cwd(), 'public');
-let loggedTuningsPayload = false;
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -106,11 +105,6 @@ function expandSequence(events = [], loopCount = 1) {
 
 function handleTunings(req, res) {
   const payload = listTunings();
-  if (!loggedTuningsPayload && process.env.NODE_ENV !== 'production') {
-    // eslint-disable-next-line no-console
-    console.log('Tunings payload', payload);
-    loggedTuningsPayload = true;
-  }
   sendJson(res, 200, {
     ...payload,
     baseFrequency: config.baseFrequency,
