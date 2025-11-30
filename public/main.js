@@ -55,21 +55,20 @@ const loadPatchBtn = document.getElementById('loadPatch');
 const patchFileInput = document.getElementById('patchFile');
 const NOTE_NAMES_12 = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-const LEGACY_PRESET_MAP = {
-  major: 'major-triad',
-  minor: 'minor-triad',
-  diminished: 'diminished-triad',
-  augmented: 'augmented-triad',
-  dom7: 'dominant-7',
-  maj7: 'major-7',
-  min7: 'minor-7',
-  sus2: 'sus2',
-  sus4: 'sus4',
-  add9: 'add9',
-  add11: 'add11',
-  add13: 'add13',
-  sixth: 'sixth',
-};
+const CHORD_PRESETS = [
+  { id: 'major', label: 'Major', intervals: [0, 400, 700] },
+  { id: 'minor', label: 'Minor', intervals: [0, 300, 700] },
+  { id: 'diminished', label: 'Diminished', intervals: [0, 300, 600] },
+  { id: 'augmented', label: 'Augmented', intervals: [0, 400, 800] },
+  { id: 'dom7', label: 'Dominant 7', intervals: [0, 400, 700, 1000] },
+  { id: 'maj7', label: 'Major 7', intervals: [0, 400, 700, 1100] },
+  { id: 'min7', label: 'Minor 7', intervals: [0, 300, 700, 1000] },
+  { id: 'sus2', label: 'Suspended 2', intervals: [0, 200, 700] },
+  { id: 'sus4', label: 'Suspended 4', intervals: [0, 500, 700] },
+  { id: 'add9', label: 'Add9', intervals: [0, 400, 700, 1400] },
+  { id: 'add11', label: 'Add11', intervals: [0, 400, 700, 1700] },
+  { id: 'add13', label: 'Add13', intervals: [0, 400, 700, 2100] },
+];
 
 const defaultSynth = {
   waveform: 'saw',
@@ -93,15 +92,13 @@ function defaultArp() {
 }
 
 function defaultChord() {
-  return { tuningId: null, root: 0, notes: [], preset: 'major-triad', arp: defaultArp() };
+  return { tuningId: null, root: 0, notes: [0, 4, 7], preset: 'major', arp: defaultArp() };
 }
 
 const MAX_CHORDS = 5;
 
 const state = {
   tunings: [],
-  chordPresets: {},
-  rootOptions: {},
   baseFrequency: 440,
   activeChord: 0,
   chords: Array.from({ length: MAX_CHORDS }, () => defaultChord()),
@@ -120,10 +117,6 @@ function clampRhythmSpeed(value) {
 
 function clampLoopChordCount(value) {
   return Math.max(1, Math.min(MAX_CHORDS, Math.round(Number(value) || 1)));
-}
-
-function coercePresetId(presetId) {
-  return LEGACY_PRESET_MAP[presetId] || presetId;
 }
 
 const OSC_TYPE_MAP = {
@@ -151,19 +144,17 @@ function getDegreeSpan(tuning) {
   return tuning.intervals?.length || tuning.count || 12;
 }
 
-function degreeLabel(tuning, degree, root = 0) {
-  const span = getDegreeSpan(tuning);
-  const wrappedDegree = ((degree % span) + span) % span;
-  const wrappedRoot = ((root % span) + span) % span;
-  const isRoot = wrappedDegree === wrappedRoot;
-  if (tuning?.type === 'edo' && tuning.value === 12) {
-    const label = NOTE_NAMES_12[wrappedDegree % 12];
-    return isRoot ? `${label} •` : label;
+  function degreeLabel(tuning, degree, root = 0) {
+    const span = getDegreeSpan(tuning);
+    const wrappedDegree = ((degree % span) + span) % span;
+    const wrappedRoot = ((root % span) + span) % span;
+    const isRoot = wrappedDegree === wrappedRoot;
+    if (tuning?.type === 'edo' && tuning.value === 12) {
+      const label = NOTE_NAMES_12[wrappedDegree % 12];
+      return isRoot ? `${label} •` : label;
+    }
+    return `${isRoot ? 'R ' : ''}${wrappedDegree + 1}°`;
   }
-  const zeroBased = tuning?.id === 'edo:9-orwell';
-  const numeric = zeroBased ? wrappedDegree : wrappedDegree + 1;
-  return `${isRoot ? 'R ' : ''}${numeric}°`;
-}
 
 function degreeToFrequency(tuningId, degree) {
   const tuning = getTuning(tuningId);
@@ -216,36 +207,9 @@ function degreeForCentsTarget(target, tuning) {
   return bestIndex + oct * span;
 }
 
-function getPresetList(tuningId) {
-  return state.chordPresets[tuningId] || [];
-}
-
-function findPreset(tuningId, presetId) {
-  return getPresetList(tuningId).find((preset) => preset.id === presetId);
-}
-
-function applyPresetToChord(chord, preset) {
-  if (!chord || !preset) return;
-  const root = chord.root || 0;
-  const mappedDegrees = (preset.degrees || []).map((deg) => deg + root);
-  chord.notes = Array.from(new Set(mappedDegrees)).sort((a, b) => a - b);
-  chord.preset = preset.id;
-  normalizeChordNotes(chord);
-}
-
-async function ensureChordPresets(tuningId) {
-  if (!tuningId || state.chordPresets[tuningId]) return;
-  try {
-    const res = await fetch(apiUrl(`/api/chords?tuningId=${encodeURIComponent(tuningId)}`));
-    const data = await res.json();
-    state.chordPresets[tuningId] = data.chords || [];
-    state.rootOptions[tuningId] = data.roots || [];
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to load chord presets', error);
-    state.chordPresets[tuningId] = [];
-    state.rootOptions[tuningId] = [];
-  }
+function mapIntervalsToDegrees(intervals, tuning, root = 0) {
+  const degrees = intervals.map((interval) => root + degreeForCentsTarget(interval, tuning));
+  return Array.from(new Set(degrees)).sort((a, b) => a - b);
 }
 
 function normalizeChordNotes(chord) {
@@ -298,50 +262,29 @@ function renderTuningOptions() {
 
 function renderPresetOptions() {
   chordPreset.innerHTML = '';
-  const chord = state.chords[state.activeChord];
-  const presets = getPresetList(chord.tuningId);
-  if (!presets.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'No presets';
-    chordPreset.appendChild(opt);
-    chordPreset.disabled = true;
-    return;
-  }
-  chordPreset.disabled = false;
-  presets.forEach((preset) => {
+  CHORD_PRESETS.forEach((preset) => {
     const opt = document.createElement('option');
     opt.value = preset.id;
     opt.textContent = preset.label;
     chordPreset.appendChild(opt);
   });
-  if (!presets.find((p) => p.id === chord.preset) && presets[0]) {
-    chord.preset = presets[0].id;
-  }
-  chordPreset.value = chord.preset || presets[0]?.id || '';
 }
 
 function renderRootOptions() {
   const chord = state.chords[state.activeChord];
   const tuning = getTuning(chord.tuningId);
   const span = getDegreeSpan(tuning);
-  const presetRoots = state.rootOptions[tuning?.id];
-  const rootEntries = presetRoots?.length
-    ? presetRoots
-    : Array.from({ length: tuning?.type === 'edo' ? Math.max(span * 2, span) : span }, (_, i) => ({
-        value: i,
-        label: degreeLabel(tuning, i, i),
-      }));
+  const rootCount = tuning?.type === 'edo' ? Math.max(span * 2, span) : span;
   chordRoot.innerHTML = '';
-  if (chord.root >= rootEntries.length) {
+  if (chord.root >= rootCount) {
     chord.root = 0;
   }
-  rootEntries.forEach((rootOption) => {
+  for (let i = 0; i < rootCount; i += 1) {
     const opt = document.createElement('option');
-    opt.value = rootOption.value;
-    opt.textContent = rootOption.label || degreeLabel(tuning, rootOption.value, rootOption.value);
+    opt.value = i;
+    opt.textContent = degreeLabel(tuning, i, i);
     chordRoot.appendChild(opt);
-  });
+  }
   chordRoot.value = chord.root || 0;
 }
 
@@ -351,7 +294,6 @@ function baseHueForTuning(tuning) {
     const hueMap = {
       8: 150,
       12: 188,
-      9: 262,
       19: 295,
       22: 48,
       24: 328,
@@ -570,22 +512,12 @@ function renderActiveChord() {
   if (chord.root == null) chord.root = 0;
   chordLabel.textContent = `Chord ${state.activeChord + 1}`;
   chordTuning.value = chord.tuningId || '';
-  renderPresetOptions();
+  chordPreset.value = chord.preset || 'major';
   chordArpEnabled.checked = Boolean(chord.arp?.enabled);
   chordArpPattern.value = chord.arp?.pattern || 'up';
   chordArpRate.value = chord.arp?.rate || '1/8';
   renderRootOptions();
   renderCircle();
-  ensureChordPresets(chord.tuningId).then(() => {
-    const presets = getPresetList(chord.tuningId);
-    if (!presets.find((p) => p.id === chord.preset) && presets[0]) {
-      chord.preset = presets[0].id;
-      applyPresetToChord(chord, presets[0]);
-    }
-    renderPresetOptions();
-    renderRootOptions();
-    renderCircle();
-  });
 }
 
 function syncSynthLabels() {
@@ -605,27 +537,22 @@ function attachControlListeners() {
     const chord = state.chords[state.activeChord];
     chord.tuningId = e.target.value;
     normalizeChordNotes(chord);
-    ensureChordPresets(chord.tuningId).then(() => {
-      const presets = getPresetList(chord.tuningId);
-      if (!presets.find((p) => p.id === chord.preset) && presets[0]) {
-        chord.preset = presets[0].id;
-      }
-      const preset = findPreset(chord.tuningId, chord.preset);
-      if (preset) {
-        applyPresetToChord(chord, preset);
-      }
-      renderRootOptions();
-      renderPresetOptions();
-      renderCircle();
-    });
+    const preset = CHORD_PRESETS.find((p) => p.id === chord.preset);
+    const tuning = getTuning(chord.tuningId);
+    if (preset && tuning) {
+      chord.notes = mapIntervalsToDegrees(preset.intervals, tuning, chord.root || 0);
+    }
+    renderRootOptions();
+    renderCircle();
   };
 
   chordPreset.onchange = (e) => {
     const chord = state.chords[state.activeChord];
-    const preset = findPreset(chord.tuningId, e.target.value);
-    chord.preset = preset?.id || e.target.value;
-    if (preset) {
-      applyPresetToChord(chord, preset);
+    chord.preset = e.target.value;
+    const preset = CHORD_PRESETS.find((p) => p.id === chord.preset);
+    const tuning = getTuning(chord.tuningId);
+    if (preset && tuning) {
+      chord.notes = mapIntervalsToDegrees(preset.intervals, tuning, chord.root || 0);
     }
     renderCircle();
   };
@@ -1335,7 +1262,7 @@ function applyPatch(data) {
     state.chords[idx].tuningId = entry.tuningId || state.tunings[0]?.id || null;
     state.chords[idx].notes = Array.isArray(entry.notes) ? entry.notes.map((n) => Number(n)) : [];
     state.chords[idx].root = Number(entry.root ?? state.chords[idx].root ?? 0);
-    state.chords[idx].preset = coercePresetId(entry.preset || state.chords[idx].preset || 'major-triad');
+    state.chords[idx].preset = entry.preset || state.chords[idx].preset || 'major';
     state.chords[idx].arp = { ...defaultArp(), ...(entry.arp || {}) };
     normalizeChordNotes(state.chords[idx]);
   });
@@ -1410,6 +1337,7 @@ function loadPatch(file) {
 async function init() {
   attachControlListeners();
   syncSynthLabels();
+  renderPresetOptions();
   state.loopChordCount = clampLoopChordCount(state.loopChordCount);
   loopChordCountInput.value = state.loopChordCount;
   loopChord.checked = state.preview.loop;
@@ -1418,31 +1346,18 @@ async function init() {
   state.tunings = (data.tunings || []).filter((tuning) => !(tuning.type === 'edo' && Number(tuning.value) === 32));
   state.baseFrequency = data.baseFrequency || 440;
   state.chords.forEach((chord) => {
-    chord.tuningId = chord.tuningId || state.tunings[0]?.id || null;
+    chord.tuningId = state.tunings[0]?.id || null;
     chord.root = chord.root || 0;
-    chord.preset = coercePresetId(chord.preset || 'major-triad');
+    chord.preset = chord.preset || 'major';
+    const preset = CHORD_PRESETS.find((p) => p.id === chord.preset);
+    const tuning = getTuning(chord.tuningId);
+    if (preset && tuning) {
+      chord.notes = mapIntervalsToDegrees(preset.intervals, tuning, chord.root);
+    }
     normalizeChordNotes(chord);
-  });
-  const tuningIds = Array.from(new Set(state.chords.map((c) => c.tuningId).filter(Boolean)));
-  // preload presets for any tunings already assigned to chords
-  // eslint-disable-next-line no-restricted-syntax
-  for (const tuningId of tuningIds) {
-    // eslint-disable-next-line no-await-in-loop
-    await ensureChordPresets(tuningId);
-  }
-  state.chords.forEach((chord) => {
-    const presets = getPresetList(chord.tuningId);
-    if (!presets.find((p) => p.id === chord.preset) && presets[0]) {
-      chord.preset = presets[0].id;
-    }
-    const preset = findPreset(chord.tuningId, chord.preset);
-    if (preset && !chord.notes.length) {
-      applyPresetToChord(chord, preset);
-    }
   });
   renderTuningOptions();
   renderRootOptions();
-  renderPresetOptions();
   renderActiveChord();
   updateStatus('Ready');
 }
