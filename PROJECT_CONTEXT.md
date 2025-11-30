@@ -9,15 +9,15 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
-  - Chords panel: up to five chord tabs, with the visible count controlled by a "Chords in loop" selector. Each chord stores its own tuning, root, notes, preset, and arpeggiator settings on a multi-octave spiral picker covering three visible octaves (0–2) for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`) that start at 1 for non-12-EDO tunings, spacing tuned for dense temperaments like 31-EDO, and temperament-specific color themes with subdued inactive bubbles and high-contrast highlighted selections. Preset chords (major, minor, dominant 7, suspended, add9/add11/add13, etc.) remap their target intervals to the currently selected temperament, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz). Each chord exposes an arpeggiator toggle, pattern (up/down/up-down/random), musical rate (1/4–1/16 with triplet eighths), and a preview loop toggle.
+  - Chords panel: up to five chord tabs, with the visible count controlled by a "Chords in loop" selector. Each chord stores its own tuning, root, notes, preset, and arpeggiator settings on a multi-octave spiral picker covering three visible octaves (0–2) for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`) that start at 1 for non-12-EDO tunings (Orwell-9 displays 0–8°), spacing tuned for dense temperaments like 31-EDO, and temperament-specific color themes with subdued inactive bubbles and high-contrast highlighted selections. Preset chords are fetched per tuning from the backend (universal ratios plus temperament-specific sets) and applied by degree, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz). Each chord exposes an arpeggiator toggle, pattern (up/down/up-down/random), musical rate (1/4–1/16 with triplet eighths), and a preview loop toggle.
   - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, filter settings, loop chord count, and loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments. Patch Save/Load and loop Play/Stop/Render controls sit together at the top of the panel for quick access, with synth sliders underneath. The rendered loop audio player sits directly under the loop control row for immediate access after rendering.
   - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth/preview plus per-chord tuning, root, preset id, notes, arpeggiator settings, and the loop chord count. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
   - Loop playback/render: builds a loop-length-limited (1–5 chords) sequence (one bar per visible chord) with explicit tuning ids, full degree lists, per-event arpeggiator settings (both structured and pattern/rate flags), and derived frequencies. The resulting payload is reused verbatim by both the Web Audio loop preview path and `/api/render`, so previews and renders share identical timing, synth/rhythm settings, and 10-loop length.
 
 - **Backend** (`server/`)
   - Minimal HTTP server exposing REST endpoints:
-    - `GET /api/tunings` — returns available tunings (EDO presets + Scala discoveries) with ids, type, value, label, description, intervals, and base frequency metadata.
-    - `GET /api/chords?tuningId=...` — returns chord options and root labels for the selected tuning. Legacy `tuningType`/`tuningValue` query params still work.
+    - `GET /api/tunings` — returns available tunings (EDO presets + Scala discoveries) with ids, type, value, label, description, intervals, and base frequency metadata. Orwell-9 (`edo:9-orwell`) ships as a first-class EDO option.
+    - `GET /api/chords?tuningId=...` — returns chord options and root labels for the selected tuning. Universal presets map ratio/cents shapes into any temperament; temperament-specific presets cover 8/12/19/22/24/31-EDO plus Orwell-9, and Scala tunings generate modal triads/tetrads, fifth stacks, and step-weave voicings. Legacy `tuningType`/`tuningValue` query params still work.
     - `POST /api/play` — triggers playback (single chord or a sequence) through the active audio engine, carrying synth settings when provided.
     - `POST /api/render` — renders a single chord or a multi-bar sequence to WAV with the requested synth/rhythm settings and returns the file URL.
   - Serves static assets from `public/` and rendered files from `RENDER_OUTPUT_DIR`.
@@ -41,7 +41,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 - `/api/render` now rewrites any returned `file` path to point to `/api/render-file?path=...`, and `/api/render-file` streams the actual WAV from the droplet (e.g., `http://147.182.251.148:3000/renders/...`) back to the browser over HTTPS. No droplet changes or TLS termination are required.
 
 ## Temperaments
-- EDO tunings include 12, 19, 22, 24, 31 (plus 8-EDO) with temperament-specific chord presets sourced from the backend; Scala tunings come from the `scales` directory. Interval mapping in the UI uses cents approximations to highlight equivalent functions across temperaments and redraws the circle with the proper number of divisions. Each temperament paints the spiral with its own color theme, and the UI no longer exposes 32-EDO.
+- EDO tunings include 12, 19, 22, 24, 31, Orwell-9, and 8-EDO with temperament-specific chord presets sourced from the backend; Scala tunings come from the `scales` directory. Interval mapping in the UI uses cents approximations to highlight equivalent functions across temperaments and redraws the circle with the proper number of divisions. Each temperament paints the spiral with its own color theme, and the UI no longer exposes 32-EDO.
 
 ## UI controls
 - Chords panel: configurable tab count (1–5) based on the loop length selector, active chord label, per-chord tuning select, root selector, chord preset dropdown (major/minor/dim/aug/sus/add chords), per-chord arpeggiator (enable/pattern/rate), loop toggle, spiral note selector with toggleable degrees, interval/frequency readouts, Clear/Play buttons.
@@ -59,7 +59,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
     "preview": { "arpeggiate": false, "arpRateMs": 180, "loop": false }
   },
   "chords": [
-    { "tuningId": "edo:12", "root": 0, "preset": "major", "notes": [0,4,7], "arp": {"enabled": false, "pattern": "up", "rate": "1/8"} },
+    { "tuningId": "edo:12", "root": 0, "preset": "major-triad", "notes": [0,4,7], "arp": {"enabled": false, "pattern": "up", "rate": "1/8"} },
     { ... }
   ]
 }
