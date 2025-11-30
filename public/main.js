@@ -1415,7 +1415,7 @@ async function init() {
   loopChord.checked = state.preview.loop;
   const res = await fetch(apiUrl('/api/tunings'));
   const data = await res.json();
-  state.tunings = data.tunings || [];
+  state.tunings = (data.tunings || []).filter((tuning) => !(tuning.type === 'edo' && Number(tuning.value) === 32));
   state.baseFrequency = data.baseFrequency || 440;
   state.chords.forEach((chord) => {
     chord.tuningId = chord.tuningId || state.tunings[0]?.id || null;
