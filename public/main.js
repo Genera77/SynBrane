@@ -175,8 +175,7 @@ function degreeLabel(tuning, degree, root = 0) {
     const label = NOTE_NAMES_12[wrappedDegree % 12];
     return isRoot ? `${label} •` : label;
   }
-  const zeroBased = tuning?.id === 'edo:9-orwell';
-  const numeric = zeroBased ? wrappedDegree : wrappedDegree + 1;
+  const numeric = wrappedDegree;
   return `${isRoot ? 'R ' : ''}${numeric}°`;
 }
 
@@ -249,7 +248,8 @@ function formatDegreeList(degrees = [], tuning) {
         .map((deg) => Number(deg))
         .filter((deg) => Number.isFinite(deg))
     : [];
-  const displayDegrees = normalized.map((deg) => deg + (isTwelveEdo(tuning) ? 1 : 1));
+  if (isTwelveEdo(tuning)) return '';
+  const displayDegrees = normalized.map((deg) => deg);
   return displayDegrees.length ? displayDegrees.join(', ') : '';
 }
 
@@ -528,7 +528,7 @@ function buildSpiral(tuning) {
     point.style.setProperty('--bubble-shadow', palette.shadow);
     point.style.setProperty('--bubble-outline', palette.outline);
     point.style.setProperty('--note-transform', `translate(${x}px, ${y}px) translate(-50%, -50%)`);
-    point.title = `Degree ${degreeInOctave + 1} (oct +${octaveIndex})`;
+    point.title = `Degree ${degreeInOctave} (oct +${octaveIndex})`;
     point.textContent = degreeLabel(tuning, degreeInOctave, chord.root || 0);
     point.onclick = () => {
       const activeChord = state.chords[state.activeChord];
