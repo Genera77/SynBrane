@@ -20,9 +20,6 @@ const chordPreset = document.getElementById('chordPreset');
 const chordRoot = document.getElementById('chordRoot');
 const intervalInfo = document.getElementById('intervalInfo');
 const frequencyInfo = document.getElementById('frequencyInfo');
-const chordArpEnabled = document.getElementById('chordArpEnabled');
-const chordArpPattern = document.getElementById('chordArpPattern');
-const chordArpRate = document.getElementById('chordArpRate');
 const loopChord = document.getElementById('loopChord');
 const modeSelect = document.getElementById('modeSelect');
 const bpmInput = document.getElementById('bpm');
@@ -38,12 +35,17 @@ const sustainInput = document.getElementById('sustain');
 const sustainLabel = document.getElementById('sustainLabel');
 const releaseInput = document.getElementById('release');
 const releaseLabel = document.getElementById('releaseLabel');
+const volumeInput = document.getElementById('volume');
+const volumeLabel = document.getElementById('volumeLabel');
 const detuneInput = document.getElementById('detune');
 const detuneLabel = document.getElementById('detuneLabel');
 const cutoffInput = document.getElementById('cutoff');
 const cutoffLabel = document.getElementById('cutoffLabel');
 const resonanceInput = document.getElementById('resonance');
 const resonanceLabel = document.getElementById('resonanceLabel');
+const globalArpEnabled = document.getElementById('globalArpEnabled');
+const globalArpPattern = document.getElementById('globalArpPattern');
+const globalArpRate = document.getElementById('globalArpRate');
 const playLoopBtn = document.getElementById('playLoop');
 const stopLoopBtn = document.getElementById('stopLoop');
 const renderLoopBtn = document.getElementById('renderLoop');
@@ -84,6 +86,7 @@ const defaultSynth = {
     resonance: 0.2,
   },
   detuneCents: 3,
+  volume: 1,
 };
 
 const VISIBLE_OCTAVES = 3;
@@ -94,6 +97,13 @@ function defaultArp() {
 
 function defaultChord() {
   return { tuningId: null, root: 0, notes: [], preset: 'major-triad', arp: defaultArp() };
+}
+
+function resolveArpeggio(chord) {
+  const globalArp = { ...defaultArp(), ...(state.globalArp || {}) };
+  if (globalArp.enabled) return globalArp;
+  if (chord?.arp?.enabled) return { ...defaultArp(), ...chord.arp };
+  return globalArp;
 }
 
 const MAX_CHORDS = 5;
@@ -110,8 +120,9 @@ const state = {
   bpm: 120,
   rhythmSpeed: 0.3,
   synth: JSON.parse(JSON.stringify(defaultSynth)),
+  globalArp: defaultArp(),
   preview: { arpeggiate: false, arpRateMs: 180, loop: false },
-  loopPreview: { ctx: null, timer: null, stop: false, nodes: [], noiseBuffer: null },
+  loopPreview: { ctx: null, timer: null, stop: false, nodes: [], noiseBuffer: null, masterGain: null },
 };
 
 function clampRhythmSpeed(value) {
@@ -120,6 +131,10 @@ function clampRhythmSpeed(value) {
 
 function clampLoopChordCount(value) {
   return Math.max(1, Math.min(MAX_CHORDS, Math.round(Number(value) || 1)));
+}
+
+function clampVolume(value) {
+  return Math.max(0, Math.min(1.5, Number(value) || 0));
 }
 
 function coercePresetId(presetId) {
@@ -601,9 +616,6 @@ function renderActiveChord() {
   chordLabel.textContent = `Chord ${state.activeChord + 1}`;
   chordTuning.value = chord.tuningId || '';
   renderPresetOptions();
-  chordArpEnabled.checked = Boolean(chord.arp?.enabled);
-  chordArpPattern.value = chord.arp?.pattern || 'up';
-  chordArpRate.value = chord.arp?.rate || '1/8';
   renderRootOptions();
   renderCircle();
   ensureChordPresets(chord.tuningId).then(() => {
@@ -625,6 +637,7 @@ function syncSynthLabels() {
   decayLabel.textContent = `${state.synth.envelope.decayMs} ms`;
   sustainLabel.textContent = state.synth.envelope.sustainLevel.toFixed(2);
   releaseLabel.textContent = `${state.synth.envelope.releaseMs} ms`;
+  volumeLabel.textContent = `${(state.synth.volume ?? 1).toFixed(2)}×`;
   detuneLabel.textContent = `${state.synth.detuneCents?.toFixed(1) || 0}¢`;
   cutoffLabel.textContent = `${state.synth.filter.cutoffHz} Hz`;
   resonanceLabel.textContent = state.synth.filter.resonance.toFixed(2);
@@ -669,21 +682,6 @@ function attachControlListeners() {
     chord.notes = (chord.notes || []).map((deg) => deg + delta);
     normalizeChordNotes(chord);
     renderCircle();
-  };
-
-  chordArpEnabled.onchange = (e) => {
-    const chord = state.chords[state.activeChord];
-    chord.arp.enabled = e.target.checked;
-  };
-
-  chordArpPattern.onchange = (e) => {
-    const chord = state.chords[state.activeChord];
-    chord.arp.pattern = e.target.value;
-  };
-
-  chordArpRate.onchange = (e) => {
-    const chord = state.chords[state.activeChord];
-    chord.arp.rate = e.target.value;
   };
 
   loopChord.onchange = (e) => {
@@ -752,6 +750,24 @@ function attachControlListeners() {
     state.synth.filter.resonance = Number(e.target.value);
     syncSynthLabels();
   };
+  volumeInput.oninput = (e) => {
+    state.synth.volume = clampVolume(e.target.value);
+    volumeInput.value = state.synth.volume;
+    syncSynthLabels();
+    syncPreviewVolume();
+  };
+
+  globalArpEnabled.onchange = (e) => {
+    state.globalArp.enabled = e.target.checked;
+  };
+
+  globalArpPattern.onchange = (e) => {
+    state.globalArp.pattern = e.target.value;
+  };
+
+  globalArpRate.onchange = (e) => {
+    state.globalArp.rate = e.target.value;
+  };
 
   playLoopBtn.onclick = () => playLoop();
   renderLoopBtn.onclick = () => renderLoop();
@@ -778,11 +794,7 @@ function ensureChordComplete(chord, index) {
 function chordToEvent(chord, index) {
   ensureChordComplete(chord, index);
   const frequencies = chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg));
-  const arpeggio = {
-    enabled: Boolean(chord.arp?.enabled),
-    pattern: chord.arp?.pattern || 'up',
-    rate: chord.arp?.rate || '1/8',
-  };
+  const arpeggio = resolveArpeggio(chord);
   return {
     bar: index,
     durationBars: 1,
@@ -835,7 +847,29 @@ function getPreviewContext() {
   state.loopPreview.ctx = new AudioCtx();
   state.loopPreview.nodes = [];
   state.loopPreview.stop = false;
+  const masterGain = state.loopPreview.ctx.createGain();
+  const initialVolume = clampVolume(state.synth.volume ?? 1);
+  masterGain.gain.setValueAtTime(initialVolume, state.loopPreview.ctx.currentTime);
+  masterGain.connect(state.loopPreview.ctx.destination);
+  state.loopPreview.masterGain = masterGain;
   return state.loopPreview.ctx;
+}
+
+function getPreviewDestination() {
+  const ctx = getPreviewContext();
+  if (!state.loopPreview.masterGain) {
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(clampVolume(state.synth.volume ?? 1), ctx.currentTime);
+    gain.connect(ctx.destination);
+    state.loopPreview.masterGain = gain;
+  }
+  return state.loopPreview.masterGain;
+}
+
+function syncPreviewVolume() {
+  if (!state.loopPreview.masterGain || !state.loopPreview.ctx) return;
+  const clamped = clampVolume(state.synth.volume ?? 1);
+  state.loopPreview.masterGain.gain.setTargetAtTime(clamped, state.loopPreview.ctx.currentTime, 0.02);
 }
 
 function trackPreviewNodes(...nodes) {
@@ -958,7 +992,7 @@ function buildRhythmPattern({ degrees = [], durationSec, bpm, rhythmSpeed, voice
 function triggerDrum(role, ctx, when, velocity = 1) {
   const safeVelocity = Math.max(0.2, Math.min(1.25, velocity));
   const nodes = [];
-  const destination = ctx.destination;
+  const destination = getPreviewDestination();
 
   const connectGain = (gain) => {
     gain.connect(destination);
@@ -1098,7 +1132,7 @@ function scheduleHarmonyPreview(chord, startTime, durationSec, synthSettings, te
   const envelope = synth.envelope || defaultSynth.envelope;
   const filterCfg = synth.filter || {};
   const freqs = chord.notes.map((deg) => degreeToFrequency(chord.tuningId, deg));
-  const chordArp = chord.arp || defaultArp();
+  const chordArp = resolveArpeggio(chord);
   const useArp = chordArp.enabled && freqs.length > 1;
   const orderedFreqs = useArp ? orderFrequenciesForPattern(freqs, chordArp.pattern) : freqs;
   const stepSec = useArp ? stepDurationFromRate(chordArp.rate, tempo || state.bpm) : durationSec;
@@ -1134,7 +1168,7 @@ function scheduleHarmonyPreview(chord, startTime, durationSec, synthSettings, te
     const totalDuration = applyEnvelope(gain, ctx, noteStart, noteDuration, envelope);
     gain.gain.setValueAtTime(0.0001, noteStart - 0.01);
     lastNode.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(getPreviewDestination());
 
     osc.start(noteStart);
     osc.stop(noteStart + totalDuration + 0.05);
@@ -1199,6 +1233,7 @@ function scheduleChordPreview(chord, startTime, durationSec, { mode, synthSettin
       bpm: state.bpm,
       rhythmSpeed: state.rhythmSpeed,
       synthSettings: JSON.parse(JSON.stringify(state.synth)),
+      arpeggio: { ...defaultArp(), ...(state.globalArp || {}) },
       loopCount,
       sequence,
       loopChordCount: sequence.length,
@@ -1323,6 +1358,7 @@ function buildPatch() {
       tempo: state.bpm,
       rhythmMultiplier: state.rhythmSpeed,
       synth: { ...state.synth },
+      arpeggiator: { ...defaultArp(), ...(state.globalArp || {}) },
       preview: { ...state.preview },
     },
     chords: state.chords.map((chord) => ({
@@ -1393,6 +1429,7 @@ function applyPatch(data) {
           resonance: Number(data.global.synth.filter?.resonance ?? state.synth.filter.resonance),
         },
         detuneCents: Number(data.global.synth.detuneCents ?? state.synth.detuneCents),
+        volume: clampVolume(data.global.synth.volume ?? state.synth.volume),
       };
     }
     if (data.global.preview) {
@@ -1402,11 +1439,21 @@ function applyPatch(data) {
         loop: Boolean(data.global.preview.loop ?? state.preview.loop),
       };
     }
+    if (data.global.arpeggiator) {
+      state.globalArp = { ...defaultArp(), ...data.global.arpeggiator };
+    }
+  }
+  if (!data.global?.arpeggiator) {
+    const firstChordArp = chords.find((entry) => entry?.arp?.enabled)?.arp;
+    if (firstChordArp) {
+      state.globalArp = { ...defaultArp(), ...firstChordArp };
+    }
   }
   modeSelect.value = state.mode;
   bpmInput.value = state.bpm;
   rhythmInput.value = state.rhythmSpeed;
   waveformSelect.value = state.synth.waveform;
+  volumeInput.value = state.synth.volume;
   attackInput.value = state.synth.envelope.attackMs;
   decayInput.value = state.synth.envelope.decayMs;
   sustainInput.value = state.synth.envelope.sustainLevel;
@@ -1414,9 +1461,13 @@ function applyPatch(data) {
   detuneInput.value = state.synth.detuneCents;
   cutoffInput.value = state.synth.filter.cutoffHz;
   resonanceInput.value = state.synth.filter.resonance;
+  globalArpEnabled.checked = Boolean(state.globalArp?.enabled);
+  globalArpPattern.value = state.globalArp?.pattern || 'up';
+  globalArpRate.value = state.globalArp?.rate || '1/8';
   loopChordCountInput.value = state.loopChordCount;
   loopChord.checked = state.preview.loop;
   syncSynthLabels();
+  syncPreviewVolume();
   renderChordSwitcher();
   renderActiveChord();
 }
@@ -1440,6 +1491,10 @@ function loadPatch(file) {
 async function init() {
   attachControlListeners();
   syncSynthLabels();
+  volumeInput.value = state.synth.volume;
+  globalArpEnabled.checked = Boolean(state.globalArp.enabled);
+  globalArpPattern.value = state.globalArp.pattern;
+  globalArpRate.value = state.globalArp.rate;
   state.loopChordCount = clampLoopChordCount(state.loopChordCount);
   loopChordCountInput.value = state.loopChordCount;
   loopChord.checked = state.preview.loop;

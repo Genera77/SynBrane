@@ -55,31 +55,6 @@
               Chord preset
               <select id="chordPreset"></select>
             </label>
-            <label class="arp-block">
-              Arpeggiator
-              <div class="inline-control">
-                <input type="checkbox" id="chordArpEnabled" />
-                <span class="meta">Enable per-chord arp</span>
-              </div>
-              <div class="inline-control">
-                <span class="meta">Pattern</span>
-                <select id="chordArpPattern">
-                  <option value="up">Up</option>
-                  <option value="down">Down</option>
-                  <option value="updown">Up &amp; Down</option>
-                  <option value="random">Random</option>
-                </select>
-              </div>
-              <div class="inline-control">
-                <span class="meta">Rate</span>
-                <select id="chordArpRate">
-                  <option value="1/4">1/4</option>
-                  <option value="1/8" selected>1/8</option>
-                  <option value="1/8T">1/8T</option>
-                  <option value="1/16">1/16</option>
-                </select>
-              </div>
-            </label>
             <label>
               Loop chord
               <div class="inline-control">
@@ -180,6 +155,11 @@
             </select>
           </label>
           <label>
+            Master volume
+            <input id="volume" type="range" min="0" max="1.5" step="0.01" value="1" />
+            <span class="meta" id="volumeLabel">1.00×</span>
+          </label>
+          <label>
             Attack
             <input id="attack" type="range" min="0" max="1000" value="40" />
             <span class="meta" id="attackLabel">40 ms</span>
@@ -241,6 +221,31 @@
               value="0.2"
             />
             <span class="meta" id="resonanceLabel">0.20</span>
+          </label>
+          <label class="arp-block">
+            Global arpeggiator
+            <div class="inline-control">
+              <input type="checkbox" id="globalArpEnabled" />
+              <span class="meta">Apply to all chords</span>
+            </div>
+            <div class="inline-control">
+              <span class="meta">Pattern</span>
+              <select id="globalArpPattern">
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+                <option value="updown">Up &amp; Down</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+            <div class="inline-control">
+              <span class="meta">Rate</span>
+              <select id="globalArpRate">
+                <option value="1/4">1/4</option>
+                <option value="1/8" selected>1/8</option>
+                <option value="1/8T">1/8T</option>
+                <option value="1/16">1/16</option>
+              </select>
+            </div>
           </label>
         </div>
         <div id="status" class="meta"></div>
