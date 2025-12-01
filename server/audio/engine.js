@@ -8,11 +8,15 @@ function ensureDir(dir) {
   }
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function dbToLinear(db) {
   return 10 ** (db / 20);
 }
 
-function applyNormalization(samples, targetDb = -4) {
+function applyNormalization(samples, targetDb = -4, volume = 1) {
   const targetPeak = dbToLinear(targetDb);
   let peak = 0;
   for (let i = 0; i < samples.length; i += 1) {
@@ -23,7 +27,7 @@ function applyNormalization(samples, targetDb = -4) {
     return { gain: 1, peak };
   }
 
-  const gain = targetPeak / peak;
+  const gain = (targetPeak / peak) * clamp(Number(volume) || 0, 0, 2);
   for (let i = 0; i < samples.length; i += 1) {
     samples[i] *= gain;
   }
@@ -82,10 +86,6 @@ function arpeggioCycle(freqs, pattern) {
   return [...sorted];
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function normalizeSynthSettings(raw = {}) {
   const envelope = raw.envelope || raw.adsr || {};
   const filter = raw.filter || {};
@@ -102,6 +102,7 @@ function normalizeSynthSettings(raw = {}) {
       resonance: clamp(Number(filter.resonance ?? 0.2), 0, 1),
     },
     detuneCents: clamp(Number(raw.detuneCents ?? 0), 0, 50),
+    volume: clamp(Number(raw.volume ?? 1), 0, 2),
   };
 }
 
@@ -432,6 +433,7 @@ function renderToFile({ mode, frequencies, degrees = [], duration, mappingFactor
   ensureDir(config.renderOutputDir);
   const sampleRate = config.renderSampleRate;
   const effectiveMapping = rhythmSpeed ?? mappingFactor;
+  const normalizedSynth = normalizeSynthSettings(synthSettings || {});
   let samples;
   if (Array.isArray(events) && events.length) {
     samples = generateSequenceSamples({ mode, events, bpm: bpm || 120, sampleRate, mappingFactor: effectiveMapping, synthSettings });
@@ -448,7 +450,7 @@ function renderToFile({ mode, frequencies, degrees = [], duration, mappingFactor
       arpeggio,
     });
   }
-  applyNormalization(samples);
+  applyNormalization(samples, -4, normalizedSynth.volume);
   const wav = encodeWav(samples, sampleRate);
   const filename = `render-${mode}-${Date.now()}.wav`;
   const filePath = path.join(config.renderOutputDir, filename);

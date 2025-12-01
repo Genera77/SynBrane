@@ -9,9 +9,9 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 ## Architecture
 - **Frontend** (`public/`)
   - Plain HTML/CSS/JS served statically (locally by the Node server or by Vercel in production).
-  - Chords panel: up to five chord tabs, with the visible count controlled by a "Chords in loop" selector. Each chord stores its own tuning, root, notes, preset, and arpeggiator settings on a multi-octave spiral picker covering three visible octaves (0–2) for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`) that start at 1 for non-12-EDO tunings (Orwell-9 displays 0–8°), spacing tuned for dense temperaments like 31-EDO, and temperament-specific color themes with subdued inactive bubbles and high-contrast highlighted selections. Preset chords are fetched per tuning from the backend (universal ratios plus temperament-specific sets) and applied by degree, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz). Each chord exposes an arpeggiator toggle, pattern (up/down/up-down/random), musical rate (1/4–1/16 with triplet eighths), and a preview loop toggle.
-  - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, ADSR, filter settings, loop chord count, and loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments. Patch Save/Load and loop Play/Stop/Render controls sit together at the top of the panel for quick access, with synth sliders underneath. The rendered loop audio player sits directly under the loop control row for immediate access after rendering.
-  - Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth/preview plus per-chord tuning, root, preset id, notes, arpeggiator settings, and the loop chord count. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
+  - Chords panel: up to five chord tabs, with the visible count controlled by a "Chords in loop" selector. Each chord stores its own tuning, root, notes, and preset on a multi-octave spiral picker covering three visible octaves (0–2) for the current temperament rather than any circle-of-fifths ordering. The picker uses compact degree labels with a ° symbol (e.g., `7°`) that start at 1 for non-12-EDO tunings (Orwell-9 displays 0–8°), spacing tuned for dense temperaments like 31-EDO, and temperament-specific color themes with subdued inactive bubbles and high-contrast highlighted selections. Preset chords are fetched per tuning from the backend (universal ratios plus temperament-specific sets) and applied by degree, and users can still toggle any point afterward. Root selectors track degree names per temperament. Interval and frequency readouts explain the chosen notes (cents/steps from root, Hz). A per-chord preview loop toggle stays in this panel while arpeggiation moved to global controls.
+  - Synth Parameters panel: compact controls for mode (Harmony/Rhythm), tempo, rhythm multiplier, waveform, master volume, ADSR, filter settings, global arpeggiator (enable/pattern/rate applied to every chord), loop chord count, and loop playback/render buttons. The rhythm slider now ranges from roughly 0.1–1.0× (default ~0.3×) for subtle timing shifts instead of fast multipliers. A gentle detune control smooths polyphonic previews for dense temperaments. Patch Save/Load and loop Play/Stop/Render controls sit together at the top of the panel for quick access, with synth sliders underneath. The rendered loop audio player sits directly under the loop control row for immediate access after rendering.
+- Patch system: Save downloads a JSON file carrying global mode/tempo/rhythm/synth (including master volume)/preview/global arpeggiator plus per-chord tuning, root, preset id, notes, and the loop chord count. Load applies a JSON patch and updates the UI; rhythm multipliers are clamped to the current slider range when loading.
   - Loop playback/render: builds a loop-length-limited (1–5 chords) sequence (one bar per visible chord) with explicit tuning ids, full degree lists, per-event arpeggiator settings (both structured and pattern/rate flags), and derived frequencies. The resulting payload is reused verbatim by both the Web Audio loop preview path and `/api/render`, so previews and renders share identical timing, synth/rhythm settings, and 10-loop length.
 
 - **Backend** (`server/`)
@@ -30,9 +30,9 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
   - `index.js` — selects SuperCollider when `SUPER_COLLIDER_ENABLED=true`; otherwise uses the Node path and falls back automatically on errors.
 
 ## Audio behavior
-- **Harmony mode (Node DSP)**: oscillator waveforms (sine/saw/square), ADSR envelope, optional resonant low-pass filter, and loudness normalized around -4 dBFS. Arpeggio patterns are active and honor per-chord arpeggiator settings (enabled/pattern/rate) from the UI.
+- **Harmony mode (Node DSP)**: oscillator waveforms (sine/saw/square), ADSR envelope, optional resonant low-pass filter, and loudness normalized around -4 dBFS. Arpeggio patterns are active and honor the global arpeggiator settings (enable/pattern/rate) from the UI.
 - **Rhythm mode (Node DSP)**: drum kit voices with overtone partials and saturation. A kick + snare backbone anchors beats 1/3 and 2/4, hats ride across 4–16 step grids, and chord tones map onto toms/claps/extra percussion with density shaped by the rhythm-speed slider (0.1–1.0×).
-- **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews without relying on backend playback. The preview path supports per-chord arpeggiated or looped chords with per-note detune for smoother stacks.
+- **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews without relying on backend playback. The preview path supports globally arpeggiated or looped chords with per-note detune for smoother stacks.
 
 ## Deployment model
 - Backend (Node + audio engine) runs on a DigitalOcean droplet at `http://147.182.251.148:3001`.
@@ -45,8 +45,8 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 - EDO tunings include 8, 12, 19, 22, 24, 31, and Orwell-9 with temperament-specific chord presets sourced from the backend; Scala tunings come from the `scales` directory. Interval mapping in the UI uses cents approximations to highlight equivalent functions across temperaments and redraws the circle with the proper number of divisions. Each temperament paints the spiral with its own color theme, and the UI no longer exposes 32-EDO.
 
 ## UI controls
-- Chords panel: configurable tab count (1–5) based on the loop length selector, active chord label, per-chord tuning select, root selector, chord preset dropdown (major/minor/dim/aug/sus/add chords), per-chord arpeggiator (enable/pattern/rate), loop toggle, spiral note selector with toggleable degrees, interval/frequency readouts, Clear/Play buttons. Root dropdowns use 1-indexed degree labels (e.g., Degree 1) for non-12-EDO temperaments to match the spiral numbering, and chord preset labels display degrees as 1-indexed even though the backend remains 0-indexed. The 12-EDO preset dropdown now formats its degree lists as 1-based labels while leaving the underlying 0-based degree arrays untouched for synthesis.
-- Synth Parameters: mode (harmony/rhythm), tempo (30–300 BPM), rhythm multiplier (~0.1–1.0), waveform, attack/decay/sustain/release, detune, cutoff/resonance, loop length selector, loop playback/render buttons, and patch Save/Load.
+- Chords panel: configurable tab count (1–5) based on the loop length selector, active chord label, per-chord tuning select, root selector, chord preset dropdown (major/minor/dim/aug/sus/add chords), loop toggle, spiral note selector with toggleable degrees, interval/frequency readouts, Clear/Play buttons. Root dropdowns use 1-indexed degree labels (e.g., Degree 1) for non-12-EDO temperaments to match the spiral numbering, and chord preset labels display degrees as 1-indexed even though the backend remains 0-indexed. The 12-EDO preset dropdown now formats its degree lists as 1-based labels while leaving the underlying 0-based degree arrays untouched for synthesis.
+- Synth Parameters: mode (harmony/rhythm), tempo (30–300 BPM), rhythm multiplier (~0.1–1.0), waveform, master volume, global arpeggiator (enable/pattern/rate), attack/decay/sustain/release, detune, cutoff/resonance, loop length selector, loop playback/render buttons, and patch Save/Load.
 - Patch JSON shape (v1):
 ```
 {
@@ -56,7 +56,8 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
       "mode": "harmony",
       "tempo": 120,
       "rhythmMultiplier": 0.3,
-    "synth": { "waveform": "saw", "envelope": { ... }, "filter": { ... }, "detuneCents": 3 },
+    "synth": { "waveform": "saw", "envelope": { ... }, "filter": { ... }, "detuneCents": 3, "volume": 1 },
+    "arpeggiator": { "enabled": false, "pattern": "up", "rate": "1/8" },
     "preview": { "arpeggiate": false, "arpRateMs": 180, "loop": false }
   },
   "chords": [
@@ -65,6 +66,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
   ]
 }
 ```
+Chord-level `arp` objects remain in saved patches for backward compatibility, but playback favors the global arpeggiator when present.
 - Loop playback uses the chord circles as the single source of truth; no explore palette or bar-level editors remain.
 
 ## Configuration

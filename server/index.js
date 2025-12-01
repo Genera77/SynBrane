@@ -83,11 +83,16 @@ function parseArpeggioFields(source = {}) {
   };
 }
 
-function normalizeSequenceEvent(event, index) {
+function normalizeSequenceEvent(event, index, baseArpeggio = {}) {
   const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
   let frequencies = Array.isArray(event.frequencies) && event.frequencies.length ? event.frequencies : [];
   let customChord = event.customChord;
-  const arpeggio = parseArpeggioFields(event);
+  const parsedArpeggio = parseArpeggioFields(event);
+  const arpeggio = {
+    ...baseArpeggio,
+    ...parsedArpeggio,
+    enabled: Boolean(parsedArpeggio.enabled ?? baseArpeggio.enabled),
+  };
   if (!frequencies.length && event.customChord) {
     const resolved = resolveCustomChordDegrees({
       customChord: event.customChord,
@@ -151,12 +156,13 @@ function buildJobFromBody(body) {
   const baseArpeggio = parseArpeggioFields(body);
 
   if (Array.isArray(body.sequence) && body.sequence.length) {
-    const events = body.sequence.map((event, index) => normalizeSequenceEvent(event, index));
+    const events = body.sequence.map((event, index) => normalizeSequenceEvent(event, index, baseArpeggio));
     return {
       mode,
       bpm,
       rhythmSpeed,
       synthSettings,
+      arpeggio: baseArpeggio,
       events: expandSequence(events, body.loopCount || 1),
       loopCount: body.loopCount,
     };
