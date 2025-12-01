@@ -2,8 +2,6 @@ const config = require('../config');
 const { loadScalaScales } = require('./scalaLoader');
 
 const NOTE_NAMES_12EDO = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const ORWELL_ID = 'edo:9-orwell';
-
 const EDO_TUNINGS = [
   {
     id: 'edo:8',
@@ -99,12 +97,6 @@ const EDO_TUNINGS = [
     value: 31,
     label: '31-EDO',
     description: '31-tone meantone lattice with tight 5-limit approximations and extended dominants.',
-  },
-  {
-    id: ORWELL_ID,
-    value: 9,
-    label: 'Orwell-9',
-    description: 'Orwell 9-EDO — designed by Erv Wilson; supports neutral thirds, wide tetrads, non-octave colorations.',
   },
 ];
 
@@ -219,13 +211,6 @@ const TEMPERAMENT_SPECIFIC = {
     { id: '27-edo-third-rich', label: 'Third-Rich Triad', degrees: [0, 8, 17] },
     { id: '27-edo-triple-fifth', label: 'Triple Fifth Stack', degrees: [0, 9, 18] },
     { id: '27-edo-nonet', label: 'Neutral Nonet', degrees: [0, 4, 8, 12, 16, 20, 24] },
-  ],
-  [ORWELL_ID]: [
-    { id: 'orwell-neutral-triad', label: 'Neutral Triad', degrees: [0, 3, 6] },
-    { id: 'orwell-wide-tetrad', label: 'Orwell Wide Tetrad', degrees: [0, 3, 6, 8] },
-    { id: 'orwell-neutral-pentad', label: 'Neutral Pentad', degrees: [0, 2, 4, 6, 8] },
-    { id: 'orwell-meta-major', label: 'Wilson Meta-Major', degrees: [0, 3, 7] },
-    { id: 'orwell-symmetric-333', label: 'Symmetric 3-3-3', degrees: [0, 3, 6, 9] },
   ],
 };
 

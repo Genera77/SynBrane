@@ -1145,7 +1145,9 @@ function scheduleHarmonyPreview(chord, startTime, durationSec, synthSettings, te
   const orderedFreqs = useArp ? orderFrequenciesForPattern(freqs, chordArp.pattern) : freqs;
   const stepSec = useArp ? stepDurationFromRate(chordArp.rate, tempo || state.bpm) : durationSec;
   const noteDuration = useArp ? Math.min(durationSec, Math.max(0.08, stepSec * 0.9)) : durationSec;
-  const steps = useArp ? Math.max(1, Math.floor(durationSec / stepSec)) : orderedFreqs.length;
+  const steps = useArp
+    ? Math.max(orderedFreqs.length, Math.max(1, Math.floor(durationSec / stepSec)))
+    : orderedFreqs.length;
 
   let lastOffset = 0;
   for (let idx = 0; idx < steps; idx += 1) {
