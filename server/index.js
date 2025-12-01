@@ -83,6 +83,46 @@ function parseArpeggioFields(source = {}) {
   };
 }
 
+function normalizeSequenceEvent(event, index) {
+  const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
+  let frequencies = Array.isArray(event.frequencies) && event.frequencies.length ? event.frequencies : [];
+  let customChord = event.customChord;
+  const arpeggio = parseArpeggioFields(event);
+  if (!frequencies.length && event.customChord) {
+    const resolved = resolveCustomChordDegrees({
+      customChord: event.customChord,
+      root: event.root || 0,
+      tuningType: parsed.tuningType,
+      tuningValue: parsed.tuningValue,
+      baseFrequency: config.baseFrequency,
+    });
+    frequencies = resolved.frequencies;
+    customChord = { ...event.customChord, degrees: resolved.degrees };
+  }
+  if (!frequencies.length) {
+    frequencies = chordFrequencies({
+      ...parsed,
+      chord: event.chord,
+      root: event.root || 0,
+      baseFrequency: config.baseFrequency,
+    });
+  }
+  const degrees = customChord?.degrees || event.customChord?.degrees || event.degrees || [];
+
+  return {
+    ...parsed,
+    tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
+    chord: event.chord,
+    root: event.root || 0,
+    bar: event.bar ?? index,
+    durationBars: event.durationBars || 1,
+    frequencies,
+    customChord,
+    degrees,
+    arpeggio,
+  };
+}
+
 function expandSequence(events = [], loopCount = 1) {
   const iterations = Math.max(1, Number(loopCount) || 1);
   if (!events.length || iterations === 1) return events;
@@ -101,6 +141,67 @@ function expandSequence(events = [], loopCount = 1) {
     });
   }
   return expanded;
+}
+
+function buildJobFromBody(body) {
+  const mode = body.mode || 'harmony';
+  const rhythmSpeed = body.rhythmSpeed ?? body.mappingFactor;
+  const bpm = body.bpm || 120;
+  const synthSettings = body.synthSettings;
+  const baseArpeggio = parseArpeggioFields(body);
+
+  if (Array.isArray(body.sequence) && body.sequence.length) {
+    const events = body.sequence.map((event, index) => normalizeSequenceEvent(event, index));
+    return {
+      mode,
+      bpm,
+      rhythmSpeed,
+      synthSettings,
+      events: expandSequence(events, body.loopCount || 1),
+      loopCount: body.loopCount,
+    };
+  }
+
+  const parsed = parseTuningId(body.tuningId, body.tuningType, body.tuningValue);
+  let frequencies = Array.isArray(body.frequencies) && body.frequencies.length ? body.frequencies : [];
+  let customChord = body.customChord;
+  if (!frequencies.length && body.customChord) {
+    const resolved = resolveCustomChordDegrees({
+      customChord: body.customChord,
+      root: body.root || 0,
+      tuningType: parsed.tuningType,
+      tuningValue: parsed.tuningValue,
+      baseFrequency: config.baseFrequency,
+    });
+    frequencies = resolved.frequencies;
+    customChord = { ...body.customChord, degrees: resolved.degrees };
+  }
+  if (!frequencies.length) {
+    frequencies = chordFrequencies({
+      ...parsed,
+      chord: body.chord,
+      root: body.root || 0,
+      baseFrequency: config.baseFrequency,
+    });
+  }
+  const degrees = customChord?.degrees || body.customChord?.degrees || body.degrees || [];
+  const duration = body.duration || 4;
+
+  return {
+    mode,
+    bpm,
+    rhythmSpeed,
+    synthSettings,
+    frequencies,
+    degrees,
+    duration,
+    loopCount: body.loopCount,
+    customChord,
+    arpeggio: baseArpeggio,
+    chord: body.chord,
+    root: body.root || 0,
+    tuning: parsed,
+  };
 }
 
 function handleTunings(req, res) {
@@ -129,92 +230,34 @@ function handleChords(req, res, query) {
 async function handlePlay(req, res) {
   try {
     const body = await parseBody(req);
-    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings, loopCount } = body;
-    const baseArpeggio = parseArpeggioFields(body);
-
-    if (Array.isArray(body.sequence) && body.sequence.length) {
-      const events = body.sequence.map((event, index) => {
-        const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
-        let frequencies = Array.isArray(event.frequencies) && event.frequencies.length ? event.frequencies : [];
-        let customChord = event.customChord;
-        const arpeggio = parseArpeggioFields(event);
-        if (!frequencies.length && event.customChord) {
-          const resolved = resolveCustomChordDegrees({
-            customChord: event.customChord,
-            root: event.root || 0,
-            tuningType: parsed.tuningType,
-            tuningValue: parsed.tuningValue,
-            baseFrequency: config.baseFrequency,
-          });
-          frequencies = resolved.frequencies;
-          customChord = { ...event.customChord, degrees: resolved.degrees };
-        }
-        if (!frequencies.length) {
-          frequencies = chordFrequencies({
-            ...parsed,
-            chord: event.chord,
-            root: event.root || 0,
-            baseFrequency: config.baseFrequency,
-          });
-        }
-        const degrees = customChord?.degrees || event.customChord?.degrees || event.degrees || [];
-        return {
-          ...parsed,
-          tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
-          chord: event.chord,
-          root: event.root || 0,
-          bar: event.bar ?? index,
-          durationBars: event.durationBars || 1,
-          frequencies,
-          customChord,
-          degrees,
-          arpeggio,
-        };
+    const job = buildJobFromBody(body);
+    if (job.events) {
+      const playResult = await playRealtime({
+        mode: job.mode,
+        rhythmSpeed: job.rhythmSpeed,
+        bpm: job.bpm,
+        events: job.events,
+        synthSettings: job.synthSettings,
+        loopCount: job.loopCount,
       });
-      const expanded = expandSequence(events, loopCount || 1);
-      const playResult = await playRealtime({ mode, rhythmSpeed, bpm, events: expanded, synthSettings, loopCount });
       sendJson(res, 200, { status: 'ok', playResult });
       return;
     }
 
-    const parsed = parseTuningId(body.tuningId, body.tuningType, body.tuningValue);
-    let frequencies = Array.isArray(body.frequencies) && body.frequencies.length ? body.frequencies : [];
-    let customChord = body.customChord;
-    if (!frequencies.length && body.customChord) {
-      const resolved = resolveCustomChordDegrees({
-        customChord: body.customChord,
-        root: body.root || 0,
-        tuningType: parsed.tuningType,
-        tuningValue: parsed.tuningValue,
-        baseFrequency: config.baseFrequency,
-      });
-      frequencies = resolved.frequencies;
-      customChord = { ...body.customChord, degrees: resolved.degrees };
-    }
-    if (!frequencies.length) {
-      frequencies = chordFrequencies({
-        ...parsed,
-        chord: body.chord,
-        root: body.root || 0,
-        baseFrequency: config.baseFrequency,
-      });
-    }
-    const duration = body.duration || 4;
-    const degrees = (customChord?.degrees || body.customChord?.degrees || body.degrees || []);
     const playResult = await playRealtime({
-      ...parsed,
-      chord: body.chord,
-      root: body.root || 0,
-      mode,
-      duration,
-      rhythmSpeed,
-      bpm,
-      frequencies,
-      degrees,
-      synthSettings,
-      loopCount,
-      customChord,
-      arpeggio: baseArpeggio,
+      ...job.tuning,
+      chord: job.chord,
+      root: job.root,
+      mode: job.mode,
+      duration: job.duration,
+      rhythmSpeed: job.rhythmSpeed,
+      bpm: job.bpm,
+      frequencies: job.frequencies,
+      degrees: job.degrees,
+      synthSettings: job.synthSettings,
+      loopCount: job.loopCount,
+      customChord: job.customChord,
+      arpeggio: job.arpeggio,
     });
     sendJson(res, 200, { status: 'ok', playResult });
   } catch (error) {
@@ -225,84 +268,31 @@ async function handlePlay(req, res) {
 async function handleRender(req, res) {
   try {
     const body = await parseBody(req);
-    const { mode = 'harmony', rhythmSpeed = body.mappingFactor, bpm = 120, synthSettings } = body;
-    const baseArpeggio = parseArpeggioFields(body);
+    const job = buildJobFromBody(body);
 
-    if (Array.isArray(body.sequence) && body.sequence.length) {
-      const events = body.sequence.map((event, index) => {
-        const parsed = parseTuningId(event.tuningId, event.tuningType, event.tuningValue);
-        let frequencies = Array.isArray(event.frequencies) && event.frequencies.length ? event.frequencies : [];
-        let customChord = event.customChord;
-        const arpeggio = parseArpeggioFields(event);
-        if (!frequencies.length && event.customChord) {
-          const resolved = resolveCustomChordDegrees({
-            customChord: event.customChord,
-            root: event.root || 0,
-            tuningType: parsed.tuningType,
-            tuningValue: parsed.tuningValue,
-            baseFrequency: config.baseFrequency,
-          });
-          frequencies = resolved.frequencies;
-          customChord = { ...event.customChord, degrees: resolved.degrees };
-        }
-        if (!frequencies.length) {
-          frequencies = chordFrequencies({
-            ...parsed,
-            chord: event.chord,
-            root: event.root || 0,
-            baseFrequency: config.baseFrequency,
-          });
-        }
-        const degrees = customChord?.degrees || event.customChord?.degrees || event.degrees || [];
-        return {
-          ...parsed,
-          tuningId: event.tuningId || `${parsed.tuningType}:${parsed.tuningValue}`,
-          chord: event.chord,
-          root: event.root || 0,
-          bar: event.bar ?? index,
-          durationBars: event.durationBars || 1,
-          frequencies,
-          customChord,
-          degrees,
-          arpeggio,
-        };
+    if (job.events) {
+      const renderResult = await renderToFile({
+        mode: job.mode,
+        bpm: job.bpm,
+        rhythmSpeed: job.rhythmSpeed,
+        events: job.events,
+        synthSettings: job.synthSettings,
       });
-      const expanded = expandSequence(events, body.loopCount || 1);
-      const renderResult = await renderToFile({ mode, bpm, rhythmSpeed, events: expanded, synthSettings });
       const relativeUrl = `/renders/${renderResult.filename}`;
       sendJson(res, 200, { status: 'ok', file: relativeUrl });
       return;
     }
 
-    const parsed = parseTuningId(body.tuningId, body.tuningType, body.tuningValue);
-    let frequencies = Array.isArray(body.frequencies) && body.frequencies.length ? body.frequencies : [];
-    let customChord = body.customChord;
-    if (!frequencies.length && body.customChord) {
-      const resolved = resolveCustomChordDegrees({
-        customChord: body.customChord,
-        root: body.root || 0,
-        tuningType: parsed.tuningType,
-        tuningValue: parsed.tuningValue,
-        baseFrequency: config.baseFrequency,
-      });
-      frequencies = resolved.frequencies;
-      customChord = { ...body.customChord, degrees: resolved.degrees };
-    }
-    if (!frequencies.length) {
-      frequencies = chordFrequencies({ ...parsed, chord: body.chord, root: body.root || 0, baseFrequency: config.baseFrequency });
-    }
-    const duration = body.duration || 4;
-    const degrees = (customChord?.degrees || body.customChord?.degrees || body.degrees || []);
     const renderResult = await renderToFile({
-      mode,
-      frequencies,
-      degrees,
-      duration,
-      rhythmSpeed,
-      bpm,
-      synthSettings,
-      customChord,
-      arpeggio: baseArpeggio,
+      mode: job.mode,
+      frequencies: job.frequencies,
+      degrees: job.degrees,
+      duration: job.duration,
+      rhythmSpeed: job.rhythmSpeed,
+      bpm: job.bpm,
+      synthSettings: job.synthSettings,
+      customChord: job.customChord,
+      arpeggio: job.arpeggio,
     });
     const relativeUrl = `/renders/${renderResult.filename}`;
     sendJson(res, 200, { status: 'ok', file: relativeUrl });
