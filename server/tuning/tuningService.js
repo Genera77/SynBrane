@@ -6,10 +6,51 @@ const ORWELL_ID = 'edo:9-orwell';
 
 const EDO_TUNINGS = [
   {
+    id: 'edo:8',
+    value: 8,
+    label: '8-EDO',
+    description: '8-tone equal temperament with symmetric structures and alternating step colors.',
+  },
+  {
+    id: 'edo:10',
+    value: 10,
+    label: '10-EDO',
+    description: '10-tone equal temperament with bold whole-tone colors and wide semitone space.',
+    rootCount: 20,
+  },
+  {
     id: 'edo:12',
     value: 12,
     label: '12-EDO (chromatic)',
     description: 'Standard 12-TET with extended and altered chord families across all roots.',
+  },
+  {
+    id: 'edo:13',
+    value: 13,
+    label: '13-EDO',
+    description: '13-tone equal temperament (Bohlen–Pierce adjacent) with gentle tridecimal color.',
+    rootCount: 26,
+  },
+  {
+    id: 'edo:15',
+    value: 15,
+    label: '15-EDO',
+    description: '15-tone equal temperament with neutral thirds and stacked fifth/fourth hybrids.',
+    rootCount: 30,
+  },
+  {
+    id: 'edo:16',
+    value: 16,
+    label: '16-EDO',
+    description: '16-tone equal temperament with even quarter-octave slices and tempered blues shades.',
+    rootCount: 32,
+  },
+  {
+    id: 'edo:17',
+    value: 17,
+    label: '17-EDO',
+    description: '17-tone equal temperament with bright diatonic-like color and compact superparticulars.',
+    rootCount: 34,
   },
   {
     id: 'edo:19',
@@ -17,6 +58,13 @@ const EDO_TUNINGS = [
     label: '19-EDO',
     description: '19-tone equal temperament with 4:5:6-like color, clusters, and stacked shapes.',
     rootCount: 38,
+  },
+  {
+    id: 'edo:20',
+    value: 20,
+    label: '20-EDO',
+    description: '20-tone equal temperament with balanced neutral and wide chromatic resources.',
+    rootCount: 40,
   },
   {
     id: 'edo:22',
@@ -33,10 +81,18 @@ const EDO_TUNINGS = [
     rootCount: 48,
   },
   {
-    id: 'edo:8',
-    value: 8,
-    label: '8-EDO',
-    description: '8-tone equal temperament with symmetric structures and alternating step colors.',
+    id: 'edo:26',
+    value: 26,
+    label: '26-EDO',
+    description: '26-tone equal temperament (porcupine-friendly) with crisp small-step clusters.',
+    rootCount: 52,
+  },
+  {
+    id: 'edo:27',
+    value: 27,
+    label: '27-EDO',
+    description: '27-tone equal temperament with three-way symmetry and close neutral intervals.',
+    rootCount: 54,
   },
   {
     id: 'edo:31',
@@ -118,6 +174,51 @@ const TEMPERAMENT_SPECIFIC = {
     { id: '31-edo-subminor-pentad', label: 'Subminor + Supermajor Pentad', degrees: [0, 8, 16, 21, 27] },
     { id: '31-edo-5-limit', label: '31-EDO 5-limit Approximant', degrees: [0, 9, 18] },
     { id: '31-edo-extended-dominant', label: 'Extended Meantone Dominant', degrees: [0, 9, 18, 25] },
+    { id: '31-edo-orwell-nonet', label: 'Orwell-9 Nonet', degrees: [0, 5, 10, 14, 18, 21, 25, 28, 30] },
+    { id: '31-edo-mothra-hexad', label: 'Mothra-6 Hexad', degrees: [0, 6, 11, 16, 20, 25] },
+    { id: '31-edo-neutral-dominant', label: 'Neutral Dominant 7', degrees: [0, 9, 18, 23] },
+    { id: '31-edo-harmonic-blues', label: 'Harmonic-Blues Tetrad', degrees: [0, 7, 10, 18] },
+    { id: '31-edo-saturated-eleventh', label: 'Saturated 11th Stack', degrees: [0, 9, 18, 25, 27] },
+  ],
+  'edo:10': [
+    { id: '10-edo-wide-major', label: 'Wide Major Triad', degrees: [0, 4, 7] },
+    { id: '10-edo-neutral', label: 'Neutral Third Triad', degrees: [0, 3, 7] },
+    { id: '10-edo-decimal-pentad', label: 'Decimal Pentad', degrees: [0, 2, 4, 7, 9] },
+  ],
+  'edo:13': [
+    { id: '13-edo-tridecimal-major', label: 'Tridecimal Major', degrees: [0, 4, 8] },
+    { id: '13-edo-neutral-seventh', label: 'Neutral Seventh', degrees: [0, 5, 9, 12] },
+    { id: '13-edo-harmonic-seventh', label: 'Harmonic Seventh Stack', degrees: [0, 4, 9, 11] },
+  ],
+  'edo:15': [
+    { id: '15-edo-meantone', label: 'Meantone-ish Triad', degrees: [0, 5, 9] },
+    { id: '15-edo-superquartal', label: 'Superquartal Stack', degrees: [0, 4, 8, 12] },
+    { id: '15-edo-neutral-dominant', label: 'Neutral Dominant', degrees: [0, 5, 9, 13] },
+  ],
+  'edo:16': [
+    { id: '16-edo-even-major', label: 'Even Major', degrees: [0, 5, 10] },
+    { id: '16-edo-warm-minor', label: 'Warm Minor', degrees: [0, 4, 10] },
+    { id: '16-edo-quartal-tetrad', label: 'Quartal Tetrad', degrees: [0, 4, 8, 12] },
+  ],
+  'edo:17': [
+    { id: '17-edo-bright-major', label: 'Bright Major', degrees: [0, 5, 10] },
+    { id: '17-edo-diatonic-hexad', label: 'Diatonic-like Hexad', degrees: [0, 3, 7, 10, 14, 17] },
+    { id: '17-edo-lush-eleventh', label: 'Lush 11th', degrees: [0, 5, 10, 14, 19] },
+  ],
+  'edo:20': [
+    { id: '20-edo-tempered-major', label: 'Tempered Major', degrees: [0, 6, 12] },
+    { id: '20-edo-neutral-tetrad', label: 'Neutral Tetrad', degrees: [0, 5, 10, 15] },
+    { id: '20-edo-wide-ninth', label: 'Wide Ninth Chord', degrees: [0, 6, 12, 16] },
+  ],
+  'edo:26': [
+    { id: '26-edo-porcupine-triad', label: 'Porcupine Triad', degrees: [0, 8, 16] },
+    { id: '26-edo-neutral', label: 'Neutral Triad', degrees: [0, 10, 18] },
+    { id: '26-edo-porcupine-heptad', label: 'Porcupine Heptad', degrees: [0, 4, 8, 12, 16, 20, 24] },
+  ],
+  'edo:27': [
+    { id: '27-edo-third-rich', label: 'Third-Rich Triad', degrees: [0, 8, 17] },
+    { id: '27-edo-triple-fifth', label: 'Triple Fifth Stack', degrees: [0, 9, 18] },
+    { id: '27-edo-nonet', label: 'Neutral Nonet', degrees: [0, 4, 8, 12, 16, 20, 24] },
   ],
   [ORWELL_ID]: [
     { id: 'orwell-neutral-triad', label: 'Neutral Triad', degrees: [0, 3, 6] },
