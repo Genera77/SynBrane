@@ -394,6 +394,7 @@ function baseHueForTuning(tuning) {
   if (!tuning) return 200;
   if (tuning.type === 'edo') {
     const hueMap = {
+      10: 210,
       8: 150,
       12: 188,
       9: 262,
@@ -401,6 +402,13 @@ function baseHueForTuning(tuning) {
       22: 48,
       24: 328,
       31: 32,
+      13: 120,
+      15: 82,
+      16: 240,
+      17: 18,
+      20: 260,
+      26: 305,
+      27: 340,
     };
     return hueMap[tuning.value] ?? ((tuning.value * 11 + 60) % 360);
   }
