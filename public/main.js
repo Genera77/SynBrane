@@ -224,24 +224,28 @@ function findPreset(tuningId, presetId) {
   return getPresetList(tuningId).find((preset) => preset.id === presetId);
 }
 
-function formatDegreeList(degrees = []) {
+function isTwelveEdo(tuning) {
+  return tuning?.id === 'edo:12' || (tuning?.type === 'edo' && Number(tuning?.value) === 12);
+}
+
+function formatDegreeList(degrees = [], tuning) {
   const normalized = Array.isArray(degrees)
     ? degrees
         .map((deg) => Number(deg))
         .filter((deg) => Number.isFinite(deg))
-        .map((deg) => deg + 1)
     : [];
-  return normalized.length ? normalized.join(', ') : '';
+  const displayDegrees = normalized.map((deg) => deg + (isTwelveEdo(tuning) ? 1 : 1));
+  return displayDegrees.length ? displayDegrees.join(', ') : '';
 }
 
-function presetDegreeLabel(preset) {
-  const degrees = formatDegreeList(preset?.degrees);
+function presetDegreeLabel(preset, tuning) {
+  const degrees = formatDegreeList(preset?.degrees, tuning);
   return degrees ? ` (${degrees})` : '';
 }
 
-function displayPresetLabel(preset) {
+function displayPresetLabel(preset, tuning) {
   if (!preset) return '';
-  const degreeText = presetDegreeLabel(preset);
+  const degreeText = presetDegreeLabel(preset, tuning);
   if (!degreeText) return preset.label;
   const strippedLabel = preset.label.replace(/\s*\([^)]*\)\s*$/, '').trim();
   return `${strippedLabel}${degreeText}`;
@@ -322,6 +326,7 @@ function renderTuningOptions() {
 function renderPresetOptions() {
   chordPreset.innerHTML = '';
   const chord = state.chords[state.activeChord];
+  const tuning = getTuning(chord.tuningId);
   const presets = getPresetList(chord.tuningId);
   if (!presets.length) {
     const opt = document.createElement('option');
@@ -335,7 +340,7 @@ function renderPresetOptions() {
   presets.forEach((preset) => {
     const opt = document.createElement('option');
     opt.value = preset.id;
-    const displayLabel = displayPresetLabel(preset);
+    const displayLabel = displayPresetLabel(preset, tuning);
     opt.textContent = displayLabel;
     opt.title = displayLabel;
     chordPreset.appendChild(opt);
