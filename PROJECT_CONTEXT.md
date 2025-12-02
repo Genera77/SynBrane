@@ -31,7 +31,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
 
 ## Audio behavior
 - **Harmony mode (Node DSP)**: oscillator waveforms (sine/saw/square), ADSR envelope, optional resonant low-pass filter, and loudness normalized around -4 dBFS. Arpeggio patterns are active and honor the global arpeggiator settings (enable/pattern/rate) from the UI.
-- **Rhythm mode (Node DSP)**: drum kit voices with overtone partials and saturation. A kick + snare backbone anchors beats 1/3 and 2/4, hats ride across 4–16 step grids, and chord tones map onto toms/claps/extra percussion with density shaped by the rhythm-speed slider (0.1–1.0×).
+- **Rhythm mode (Node DSP)**: drum kit voices with overtone partials and saturation. A kick + snare backbone anchors beats 1/3 and 2/4, hats ride across 4–16 step grids, and chord tones map onto toms/claps/extra percussion with density shaped by the rhythm-speed slider (0.1–1.0×). Partial stacks are now band-limited per hit to avoid aliasing, and rendered rhythms run through a gentle low-pass to keep cymbals bright without brittle foldover.
 - **Browser preview** mirrors these designs using in-browser Web Audio for chord/loop previews without relying on backend playback. The preview path supports globally arpeggiated or looped chords with per-note detune for smoother stacks and ensures arpeggiated previews cycle through every highlighted note before finishing.
 
 ## Deployment model

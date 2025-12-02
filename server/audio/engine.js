@@ -288,6 +288,7 @@ function generateChordSamples({ mode, frequencies = [], degrees = [], duration, 
     const totalSamples = Math.max(1, Math.floor(sampleRate * pattern.duration));
     const samples = new Float32Array(totalSamples);
     addRhythmPatternHits(samples, 0, sampleRate, pattern);
+    applyLowPassFilter(samples, sampleRate, Math.min(sampleRate / 2 - 500, 16000), 0.12);
     return samples;
   }
 
@@ -341,6 +342,12 @@ function addPercussiveHit(samples, startSample, sampleRate, {
   const attackSamples = Math.max(1, Math.floor(attack * sampleRate));
   const decaySamples = Math.max(1, Math.floor(decay * sampleRate));
   const totalSamples = attackSamples + decaySamples;
+  const nyquist = sampleRate / 2;
+  const safeMaxFreq = nyquist * 0.95;
+  const filteredPartials = (partials || [])
+    .filter((partial) => partial > 0 && baseFrequency * partial < safeMaxFreq)
+    .sort((a, b) => a - b);
+  const partialSet = filteredPartials.length ? filteredPartials : [1];
 
   for (let i = 0; i < totalSamples; i += 1) {
     const env = i < attackSamples
@@ -353,12 +360,10 @@ function addPercussiveHit(samples, startSample, sampleRate, {
       sampleValue += (Math.random() * 2 - 1) * noiseMix;
     }
 
-    if (partials?.length) {
-      partials.forEach((partial, index) => {
-        const weight = 1 / Math.max(1.5, index + 1);
-        sampleValue += Math.sin(2 * Math.PI * baseFrequency * partial * time) * weight;
-      });
-    }
+    partialSet.forEach((partial, index) => {
+      const weight = 1 / Math.max(1.5, index + 1);
+      sampleValue += Math.sin(2 * Math.PI * baseFrequency * partial * time) * weight;
+    });
 
     const targetIndex = startSample + i;
     if (targetIndex < samples.length) {
