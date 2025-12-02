@@ -277,29 +277,13 @@ async function handleRender(req, res) {
     const job = buildJobFromBody(body);
 
     if (job.events) {
-      const renderResult = await renderToFile({
-        mode: job.mode,
-        bpm: job.bpm,
-        rhythmSpeed: job.rhythmSpeed,
-        events: job.events,
-        synthSettings: job.synthSettings,
-      });
+      const renderResult = await renderToFile(job);
       const relativeUrl = `/renders/${renderResult.filename}`;
       sendJson(res, 200, { status: 'ok', file: relativeUrl });
       return;
     }
 
-    const renderResult = await renderToFile({
-      mode: job.mode,
-      frequencies: job.frequencies,
-      degrees: job.degrees,
-      duration: job.duration,
-      rhythmSpeed: job.rhythmSpeed,
-      bpm: job.bpm,
-      synthSettings: job.synthSettings,
-      customChord: job.customChord,
-      arpeggio: job.arpeggio,
-    });
+    const renderResult = await renderToFile(job);
     const relativeUrl = `/renders/${renderResult.filename}`;
     sendJson(res, 200, { status: 'ok', file: relativeUrl });
   } catch (error) {

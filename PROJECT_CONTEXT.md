@@ -19,7 +19,7 @@ The About link now sits beneath the subtitle, aligned to the right so it no long
     - `GET /api/tunings` — returns available tunings (EDO presets + Scala discoveries) with ids, type, value, label, description, intervals, and base frequency metadata.
     - `GET /api/chords?tuningId=...` — returns chord options and root labels for the selected tuning. Universal presets map ratio/cents shapes into any temperament; temperament-specific presets cover 8/12/19/22/24/31-EDO (including Orwell-derived voicings folded into 31-EDO), and Scala tunings generate modal triads/tetrads, fifth stacks, and step-weave voicings. The endpoint prefers `tuningId` and still honors legacy `tuningType`/`tuningValue` query params. Degree-equivalent presets are deduplicated per temperament (keeping temperament-specific shapes first) so each tuning shows a unique set of chord options.
     - `POST /api/play` — triggers playback (single chord or a sequence) through the active audio engine, carrying synth settings when provided.
-    - `POST /api/render` — renders a single chord or a multi-bar sequence to WAV with the requested synth/rhythm settings and returns the file URL.
+    - `POST /api/render` — renders a single chord or a multi-bar sequence to WAV with the requested synth/rhythm settings and returns the file URL, forwarding the fully normalized job (including loop counts and arpeggiator flags) straight to the audio layer.
     - Playback and render endpoints now share a common job normalizer (`buildJobFromBody`) so loop sequences, arpeggiator flags, and synth settings are expanded identically for live play and renders.
   - Serves static assets from `public/` and rendered files from `RENDER_OUTPUT_DIR`.
   - Tuning helpers live in `server/tuning/`.
