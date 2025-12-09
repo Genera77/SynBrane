@@ -413,6 +413,7 @@ button.secondary {
 .chord-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .primary-controls {
