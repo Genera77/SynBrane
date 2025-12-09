@@ -16,6 +16,7 @@ const chordTuning = document.getElementById('chordTuning');
 const noteCircle = document.getElementById('noteCircle');
 const clearChordBtn = document.getElementById('clearChord');
 const playActiveBtn = document.getElementById('playActiveChord');
+const copyChordBtn = document.getElementById('copyChord');
 const chordPreset = document.getElementById('chordPreset');
 const chordRoot = document.getElementById('chordRoot');
 const intervalInfo = document.getElementById('intervalInfo');
@@ -131,6 +132,10 @@ function clampRhythmSpeed(value) {
 
 function clampLoopChordCount(value) {
   return Math.max(1, Math.min(MAX_CHORDS, Math.round(Number(value) || 1)));
+}
+
+function getVisibleChordCount() {
+  return Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount || 1), state.chords.length));
 }
 
 function clampVolume(value) {
@@ -318,7 +323,7 @@ function normalizeChordNotes(chord) {
 
 function renderChordSwitcher() {
   chordSwitcher.innerHTML = '';
-  const visibleChords = Math.max(1, Math.min(clampLoopChordCount(state.loopChordCount || 1), state.chords.length));
+  const visibleChords = getVisibleChordCount();
   if (state.activeChord >= visibleChords) {
     state.activeChord = visibleChords - 1;
   }
@@ -620,6 +625,34 @@ function renderIntervalPanels() {
   frequencyInfo.textContent = freqLines.join('\n') || 'Frequencies will appear here.';
 }
 
+function copyActiveChordToNext() {
+  const fromIndex = state.activeChord;
+  const nextIndex = fromIndex + 1;
+  const visibleChords = getVisibleChordCount();
+  if (nextIndex >= visibleChords) {
+    updateStatus('No next chord to copy to. Increase loop length to add another chord.');
+    return;
+  }
+
+  const source = normalizeChordNotes({
+    ...state.chords[fromIndex],
+    notes: [...(state.chords[fromIndex]?.notes || [])],
+  });
+
+  const target = state.chords[nextIndex];
+  target.tuningId = source.tuningId;
+  target.root = source.root || 0;
+  target.notes = [...(source.notes || [])];
+  target.preset = source.preset;
+  target.arp = { ...defaultArp(), ...(source.arp || {}) };
+
+  normalizeChordNotes(target);
+
+  state.activeChord = nextIndex;
+  renderActiveChord();
+  updateStatus(`Copied chord ${fromIndex + 1} to chord ${nextIndex + 1}`);
+}
+
 function renderActiveChord() {
   renderChordSwitcher();
   const chord = normalizeChordNotes(state.chords[state.activeChord]);
@@ -716,6 +749,8 @@ function attachControlListeners() {
   };
 
   playActiveBtn.onclick = () => playChord(state.activeChord);
+
+  copyChordBtn.onclick = copyActiveChordToNext;
 
     modeSelect.onchange = (e) => {
       state.mode = e.target.value;
