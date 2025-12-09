@@ -55,6 +55,34 @@
               Chord preset
               <select id="chordPreset"></select>
             </label>
+            <div class="arp-block global-arp">
+              Global arpeggiator
+              <div class="toggle-row">
+                <label class="switch" aria-label="Toggle global arpeggiator">
+                  <input type="checkbox" id="globalArpEnabled" role="switch" aria-checked="false" />
+                  <span class="slider" aria-hidden="true"></span>
+                </label>
+                <span class="meta">All chords, previews, and loops</span>
+              </div>
+              <div class="inline-control">
+                <span class="meta">Pattern</span>
+                <select id="globalArpPattern">
+                  <option value="up">Up</option>
+                  <option value="down">Down</option>
+                  <option value="updown">Up &amp; Down</option>
+                  <option value="random">Random</option>
+                </select>
+              </div>
+              <div class="inline-control">
+                <span class="meta">Rate</span>
+                <select id="globalArpRate">
+                  <option value="1/4">1/4</option>
+                  <option value="1/8" selected>1/8</option>
+                  <option value="1/8T">1/8T</option>
+                  <option value="1/16">1/16</option>
+                </select>
+              </div>
+            </div>
             <label>
               Loop chord
               <div class="inline-control">
@@ -113,31 +141,6 @@
             Master volume
             <input id="volume" type="range" min="0" max="1.5" step="0.01" value="1" />
             <span class="meta" id="volumeLabel">1.00×</span>
-          </label>
-          <label class="arp-block">
-            Global arpeggiator
-            <div class="inline-control">
-              <input type="checkbox" id="globalArpEnabled" />
-              <span class="meta">Apply to all chords</span>
-            </div>
-            <div class="inline-control">
-              <span class="meta">Pattern</span>
-              <select id="globalArpPattern">
-                <option value="up">Up</option>
-                <option value="down">Down</option>
-                <option value="updown">Up &amp; Down</option>
-                <option value="random">Random</option>
-              </select>
-            </div>
-            <div class="inline-control">
-              <span class="meta">Rate</span>
-              <select id="globalArpRate">
-                <option value="1/4">1/4</option>
-                <option value="1/8" selected>1/8</option>
-                <option value="1/8T">1/8T</option>
-                <option value="1/16">1/16</option>
-              </select>
-            </div>
           </label>
         </div>
         <div class="control-grid">
