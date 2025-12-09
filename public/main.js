@@ -137,6 +137,12 @@ function clampVolume(value) {
   return Math.max(0, Math.min(1.5, Number(value) || 0));
 }
 
+function syncGlobalArpToggle(enabled) {
+  const active = Boolean(enabled);
+  globalArpEnabled.checked = active;
+  globalArpEnabled.setAttribute('aria-checked', String(active));
+}
+
 function coercePresetId(presetId) {
   return LEGACY_PRESET_MAP[presetId] || presetId;
 }
@@ -767,6 +773,7 @@ function attachControlListeners() {
 
   globalArpEnabled.onchange = (e) => {
     state.globalArp.enabled = e.target.checked;
+    syncGlobalArpToggle(state.globalArp.enabled);
   };
 
   globalArpPattern.onchange = (e) => {
@@ -1471,7 +1478,7 @@ function applyPatch(data) {
   detuneInput.value = state.synth.detuneCents;
   cutoffInput.value = state.synth.filter.cutoffHz;
   resonanceInput.value = state.synth.filter.resonance;
-  globalArpEnabled.checked = Boolean(state.globalArp?.enabled);
+  syncGlobalArpToggle(state.globalArp?.enabled);
   globalArpPattern.value = state.globalArp?.pattern || 'up';
   globalArpRate.value = state.globalArp?.rate || '1/8';
   loopChordCountInput.value = state.loopChordCount;
@@ -1502,7 +1509,7 @@ async function init() {
   attachControlListeners();
   syncSynthLabels();
   volumeInput.value = state.synth.volume;
-  globalArpEnabled.checked = Boolean(state.globalArp.enabled);
+  syncGlobalArpToggle(state.globalArp.enabled);
   globalArpPattern.value = state.globalArp.pattern;
   globalArpRate.value = state.globalArp.rate;
   state.loopChordCount = clampLoopChordCount(state.loopChordCount);
