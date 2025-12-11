@@ -101,6 +101,9 @@
             <button id="stopLoop" class="ghost">Stop</button>
             <button id="renderLoop">Render Loop</button>
           </div>
+          <div id="renderPreview" class="render-preview">
+            <audio id="player" controls class="hidden"></audio>
+          </div>
           <div class="note-circle-wrap">
             <div class="note-circle" id="noteCircle"></div>
             <div class="circle-hint">Tap to toggle notes.</div>
@@ -133,9 +136,6 @@
               class="hidden"
             />
           </div>
-        </div>
-        <div id="renderPreview" class="render-preview">
-          <audio id="player" controls class="hidden"></audio>
         </div>
         <div class="control-grid top-params">
           <label>

@@ -36,7 +36,7 @@ function applyNormalization(samples, targetDb = -4, volume = 1) {
 }
 
 const DRUM_ROLE_CONFIG = {
-  kick: { amplitude: 1, attack: 0.003, decay: 0.32, baseFrequency: 55, partials: [1, 2.1, 2.9], noiseMix: 0.05, saturation: 0.9 },
+  kick: { amplitude: 1, attack: 0.003, decay: 0.32, baseFrequency: 55, partials: [1, 2.1, 2.9], noiseMix: 0.05, saturation: 0 },
   snare: {
     amplitude: 0.85,
     attack: 0.002,
@@ -44,14 +44,14 @@ const DRUM_ROLE_CONFIG = {
     baseFrequency: 185,
     partials: [1.4, 2.4, 3.6, 4.5],
     noiseMix: 0.65,
-    saturation: 0.92,
+    saturation: 0,
   },
-  closedHat: { amplitude: 0.6, attack: 0.0015, decay: 0.12, baseFrequency: 4200, partials: [3, 5, 7, 9], noiseMix: 0.75, saturation: 0.7 },
-  openHat: { amplitude: 0.55, attack: 0.002, decay: 0.35, baseFrequency: 3600, partials: [3, 6, 9, 12], noiseMix: 0.75, saturation: 0.8 },
-  lowTom: { amplitude: 0.8, attack: 0.003, decay: 0.22, baseFrequency: 130, partials: [1, 2.2, 3.1], noiseMix: 0.12, saturation: 0.8 },
-  highTom: { amplitude: 0.75, attack: 0.003, decay: 0.18, baseFrequency: 200, partials: [1, 2.4, 3.6], noiseMix: 0.12, saturation: 0.75 },
-  clap: { amplitude: 0.6, attack: 0.001, decay: 0.18, baseFrequency: 900, partials: [2.2, 3.5], noiseMix: 0.95, saturation: 0.95 },
-  perc: { amplitude: 0.55, attack: 0.001, decay: 0.14, baseFrequency: 320, partials: [2, 5, 7], noiseMix: 0.4, saturation: 0.85 },
+  closedHat: { amplitude: 0.6, attack: 0.0015, decay: 0.12, baseFrequency: 4200, partials: [3, 5, 7, 9], noiseMix: 0.75, saturation: 0 },
+  openHat: { amplitude: 0.55, attack: 0.002, decay: 0.35, baseFrequency: 3600, partials: [3, 6, 9, 12], noiseMix: 0.75, saturation: 0 },
+  lowTom: { amplitude: 0.8, attack: 0.003, decay: 0.22, baseFrequency: 130, partials: [1, 2.2, 3.1], noiseMix: 0.12, saturation: 0 },
+  highTom: { amplitude: 0.75, attack: 0.003, decay: 0.18, baseFrequency: 200, partials: [1, 2.4, 3.6], noiseMix: 0.12, saturation: 0 },
+  clap: { amplitude: 0.6, attack: 0.001, decay: 0.18, baseFrequency: 900, partials: [2.2, 3.5], noiseMix: 0.95, saturation: 0 },
+  perc: { amplitude: 0.55, attack: 0.001, decay: 0.14, baseFrequency: 320, partials: [2, 5, 7], noiseMix: 0.4, saturation: 0 },
 };
 
 function arpeggioStepDuration(rate, bpm) {
@@ -219,13 +219,13 @@ function buildRhythmPattern({ degrees = [], durationSeconds, bpm, rhythmSpeed, f
   });
 
   events.sort((a, b) => a.time - b.time);
-  return { events, duration: durationSeconds + 0.25 };
+  return { events, duration: durationSeconds + 0.3 };
 }
 
 function addRhythmPatternHits(samples, startSample, sampleRate, pattern) {
   pattern.events.forEach((event) => {
     const baseConfig = DRUM_ROLE_CONFIG[event.role] || DRUM_ROLE_CONFIG.perc;
-    const amplitude = clamp((baseConfig.amplitude || 0.6) * event.velocity, 0, 1.35);
+    const amplitude = clamp((baseConfig.amplitude || 0.6) * event.velocity, 0, 1);
     addPercussiveHit(samples, startSample + Math.floor(event.time * sampleRate), sampleRate, {
       ...baseConfig,
       amplitude,
@@ -337,7 +337,7 @@ function addPercussiveHit(samples, startSample, sampleRate, {
   baseFrequency = 80,
   partials = [1, 2, 3, 4],
   noiseMix = 0.25,
-  saturation = 0.85,
+  saturation = 0,
 } = {}) {
   const attackSamples = Math.max(1, Math.floor(attack * sampleRate));
   const decaySamples = Math.max(1, Math.floor(decay * sampleRate));
@@ -368,8 +368,8 @@ function addPercussiveHit(samples, startSample, sampleRate, {
     const targetIndex = startSample + i;
     if (targetIndex < samples.length) {
       const raw = sampleValue * env * amplitude;
-      const clipped = Math.tanh(raw * (1 + saturation * 2));
-      samples[targetIndex] += clipped;
+      const soft = saturation > 0 ? Math.tanh(raw * (1 + saturation * 2)) : raw;
+      samples[targetIndex] += soft;
     }
   }
 }
