@@ -96,6 +96,11 @@
             <button id="playActiveChord">Play chord</button>
             <button id="copyChord">Copy to next chord</button>
           </div>
+          <div class="loop-controls">
+            <button id="playLoop">Play Loop</button>
+            <button id="stopLoop" class="ghost">Stop</button>
+            <button id="renderLoop">Render Loop</button>
+          </div>
           <div class="note-circle-wrap">
             <div class="note-circle" id="noteCircle"></div>
             <div class="circle-hint">Tap to toggle notes.</div>
@@ -127,11 +132,6 @@
               accept="application/json"
               class="hidden"
             />
-          </div>
-          <div class="loop-controls">
-            <button id="playLoop">Play Loop</button>
-            <button id="stopLoop" class="ghost">Stop</button>
-            <button id="renderLoop">Render Loop</button>
           </div>
         </div>
         <div id="renderPreview" class="render-preview">
