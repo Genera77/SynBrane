@@ -1,6 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 
+function normalizePath(value) {
+  if (!value) return value;
+  const resolved = path.resolve(value);
+  const parts = resolved.split(path.sep);
+  while (parts.length >= 2 && parts[parts.length - 1] === parts[parts.length - 2]) {
+    parts.pop();
+  }
+  return parts.join(path.sep) || path.sep;
+}
+
 function parseEnvFile(envPath) {
   if (!fs.existsSync(envPath)) return {};
   const content = fs.readFileSync(envPath, 'utf8');
@@ -31,8 +41,10 @@ const config = {
   port: parseInt(process.env.PORT, 10) || 3001,
   host: process.env.HOST || '0.0.0.0',
   baseFrequency: parseFloat(process.env.BASE_FREQUENCY) || 440,
-  renderOutputDir: process.env.RENDER_OUTPUT_DIR || path.join(process.cwd(), 'renders'),
-  scalesDir: process.env.SCALES_DIR || path.join(process.cwd(), 'scales'),
+  renderOutputDir: normalizePath(
+    process.env.RENDER_OUTPUT_DIR || path.join(process.cwd(), 'renders'),
+  ),
+  scalesDir: normalizePath(process.env.SCALES_DIR || path.join(process.cwd(), 'scales')),
   superColliderEnabled: (process.env.SUPER_COLLIDER_ENABLED || '').toLowerCase() === 'true',
   superColliderSclangPath: process.env.SUPER_COLLIDER_SCLANG_PATH || 'sclang',
   renderSampleRate: Math.max(44100, parseInt(process.env.RENDER_SAMPLE_RATE, 10) || 44100),
